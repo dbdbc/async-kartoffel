@@ -1,0 +1,15 @@
+[package]
+name = "async-kartoffel"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+default = ["serial-panic"]
+
+# Enables printing of the panic message to the serial port
+serial-panic = []
+
+[dependencies]
+critical-section = "1.2.0"
+spin = "0.9.8"
+talc = "4.4.2"

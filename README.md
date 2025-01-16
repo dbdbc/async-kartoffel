@@ -1,6 +1,15 @@
 # async-kartoffel
 An asynchronous alternative firmware for kartoffels by Patryk27
 
+# Work in progress 🚧
+Missing:
+- 2d vectors, position/point
+- `Timer`, `Instant`, `Duration`
+- logging macro
+- tests
+- critical section impl
+- usage example
+
 # Basic ideas
 - concurrent execution is useful managing multiple tasks (like navigation and immediate reactions to
   new information) at once

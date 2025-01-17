@@ -1,4 +1,7 @@
-use crate::{rdi, wri, Error, MEM_MOTOR};
+use crate::{
+    mem::{motor_is_ready, motor_step, motor_turn_left, motor_turn_right},
+    Error,
+};
 
 use core::{future::poll_fn, task::Poll};
 
@@ -7,13 +10,13 @@ use super::Singleton;
 #[non_exhaustive]
 pub struct Motor;
 
-pub static mut MOTOR: Singleton<Motor> = Singleton {
+pub(super) static mut MOTOR: Singleton<Motor> = Singleton {
     instance: Some(Motor),
 };
 
 impl Motor {
     pub fn is_ready(&self) -> bool {
-        rdi(MEM_MOTOR, 0) == 1
+        motor_is_ready()
     }
 
     pub async fn wait(&self) {
@@ -30,7 +33,7 @@ impl Motor {
 
     pub fn try_step(&mut self) -> Result<(), Error> {
         if self.is_ready() {
-            wri(MEM_MOTOR, 0, 1);
+            motor_step();
             Ok(())
         } else {
             Err(Error::NotReady)
@@ -38,12 +41,12 @@ impl Motor {
     }
     pub async fn step(&mut self) {
         self.wait().await;
-        wri(MEM_MOTOR, 0, 1);
+        motor_step();
     }
 
     pub fn try_turn_left(&mut self) -> Result<(), Error> {
         if self.is_ready() {
-            wri(MEM_MOTOR, 1, u32::MAX);
+            motor_turn_left();
             Ok(())
         } else {
             Err(Error::NotReady)
@@ -51,12 +54,12 @@ impl Motor {
     }
     pub async fn turn_left(&mut self) {
         self.wait().await;
-        wri(MEM_MOTOR, 1, u32::MAX);
+        motor_turn_left();
     }
 
     pub fn try_turn_right(&mut self) -> Result<(), Error> {
         if self.is_ready() {
-            wri(MEM_MOTOR, 1, 1);
+            motor_turn_right();
             Ok(())
         } else {
             Err(Error::NotReady)
@@ -64,6 +67,6 @@ impl Motor {
     }
     pub async fn turn_right(&mut self) {
         self.wait().await;
-        wri(MEM_MOTOR, 1, 1);
+        motor_turn_right();
     }
 }

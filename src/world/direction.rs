@@ -1,45 +1,4 @@
-use core::{
-    future::poll_fn,
-    ops::{Add, AddAssign, Neg, Sub, SubAssign},
-    task::Poll,
-};
-
-use crate::{rdi, Error, Singleton, MEM_COMPASS};
-
-#[non_exhaustive]
-pub struct Compass;
-
-pub static mut COMPASS: Singleton<Compass> = Singleton {
-    instance: Some(Compass),
-};
-
-impl Compass {
-    pub async fn dir(&mut self) -> Direction {
-        poll_fn(|cx| match rdi(MEM_COMPASS, 0) {
-            0 => {
-                cx.waker().wake_by_ref();
-                Poll::Pending
-            }
-            1 => Poll::Ready(Direction::North),
-            2 => Poll::Ready(Direction::East),
-            3 => Poll::Ready(Direction::South),
-            4 => Poll::Ready(Direction::West),
-            _ => unreachable!(),
-        })
-        .await
-    }
-    pub fn try_dir(&mut self) -> Result<Direction, Error> {
-        let result = rdi(MEM_COMPASS, 0);
-        match result {
-            0 => Err(Error::NotReady),
-            1 => Ok(Direction::North),
-            2 => Ok(Direction::East),
-            3 => Ok(Direction::South),
-            4 => Ok(Direction::West),
-            _ => unreachable!(),
-        }
-    }
-}
+use core::ops::{Add, AddAssign, Neg, Sub, SubAssign};
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Hash)]
 pub enum Direction {

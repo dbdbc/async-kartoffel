@@ -1,14 +1,23 @@
 use core::{future::poll_fn, task::Poll};
 
-use crate::{rdi, wri, Error, Singleton, MEM_ARM};
+use crate::{
+    mem::{arm_drop, arm_is_ready, arm_pick, arm_stab},
+    Error,
+};
+
+use super::Singleton;
 
 #[non_exhaustive]
 pub struct Arm;
 
+pub(super) static mut ARM: Singleton<Arm> = Singleton {
+    instance: Some(Arm),
+};
+
 impl Arm {
     #[inline(always)]
     pub fn is_ready(&self) -> bool {
-        rdi(MEM_ARM, 0) == 1
+        arm_is_ready()
     }
 
     #[inline(always)]
@@ -33,7 +42,7 @@ impl Arm {
 
     pub fn try_stab(&mut self) -> Result<(), Error> {
         if self.is_ready() {
-            wri(MEM_ARM, 0, 1);
+            arm_stab();
             Ok(())
         } else {
             Err(Error::NotReady)
@@ -41,12 +50,12 @@ impl Arm {
     }
     pub async fn stab(&mut self) {
         self.wait().await;
-        wri(MEM_ARM, 0, 1);
+        arm_stab()
     }
 
     pub fn try_pick(&mut self) -> Result<(), Error> {
         if self.is_ready() {
-            wri(MEM_ARM, 0, 2);
+            arm_pick();
             Ok(())
         } else {
             Err(Error::NotReady)
@@ -54,13 +63,13 @@ impl Arm {
     }
     pub async fn pick(&mut self) {
         self.wait().await;
-        wri(MEM_ARM, 0, 2);
+        arm_pick();
     }
 
     // TODO
     pub fn try_drop(&mut self, idx: u8) -> Result<(), Error> {
         if self.is_ready() {
-            wri(MEM_ARM, 0, u32::from_be_bytes([0, 0, idx, 3]));
+            arm_drop(idx);
             Ok(())
         } else {
             Err(Error::NotReady)
@@ -68,10 +77,6 @@ impl Arm {
     }
     pub async fn drop(&mut self, idx: u8) {
         self.wait().await;
-        wri(MEM_ARM, 0, u32::from_be_bytes([0, 0, idx, 3]));
+        arm_drop(idx);
     }
 }
-
-pub static mut ARM: Singleton<Arm> = Singleton {
-    instance: Some(Arm),
-};

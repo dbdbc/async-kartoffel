@@ -1,12 +1,6 @@
-use crate::{wri, MEM_SERIAL};
-use alloc::string::String;
 use core::fmt;
 
-/// TODO replace with macro
-#[inline(always)]
-pub fn serial_write(val: impl SerialWritable) {
-    val.write();
-}
+use crate::mem::serial_write;
 
 /// Terminal control code - similar to ANSI color code, i.e. it allows to
 /// manipulate the terminal.
@@ -51,38 +45,8 @@ impl SerialControlCode {
 
         0xffffff00 | ctrl
     }
-}
-
-/// Thing that can be written into the terminal - see [`serial_write()`].
-pub trait SerialWritable {
-    fn write(self);
-}
-
-impl SerialWritable for char {
-    fn write(self) {
-        wri(MEM_SERIAL, 0, self as u32);
-    }
-}
-
-impl SerialWritable for &str {
-    fn write(self) {
-        for ch in self.chars() {
-            ch.write();
-        }
-    }
-}
-
-impl SerialWritable for String {
-    fn write(self) {
-        for ch in self.chars() {
-            ch.write();
-        }
-    }
-}
-
-impl SerialWritable for SerialControlCode {
-    fn write(self) {
-        wri(MEM_SERIAL, 0, self.encode());
+    pub fn write(&self) {
+        serial_write(self.encode());
     }
 }
 
@@ -105,7 +69,7 @@ pub struct SerialOutput;
 impl fmt::Write for SerialOutput {
     fn write_str(&mut self, s: &str) -> fmt::Result {
         for c in s.chars() {
-            c.write();
+            serial_write(c as u32);
         }
         Ok(())
     }

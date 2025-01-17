@@ -1,22 +1,63 @@
 # async-kartoffel
-An asynchronous alternative firmware for kartoffels by Patryk27
+An asynchronous alternative firmware for [kartoffels by
+Patryk27](https://github.com/Patryk27/kartoffels/)
 
 # Work in progress 🚧
 Missing:
-- 2d vectors, position/point
-- `Timer`, `Instant`, `Duration`
-- logging macro
+- usage example that includes build system
 - tests
-- critical section impl
-- usage example
+- logging?
+- inventory?
+- timer queue, better wakers?
 
-# Basic ideas
-- concurrent execution is useful managing multiple tasks (like navigation and immediate reactions to
-  new information) at once
-- moving the bot, stabbing, scanning etc. mutate global state, this is represented by encapsulating
-  these functions in singletons (`Motor`, `Arm`, `Radar`, `Compass`)
-- radar scan data is now longer accessible after a new scan happened, this is represented by
-  preventing new scan as long as not all radar scans have been dropped
-- it is nice to give the user feedback about whether certain actions succeeded or failed due to
-  cooldown
-- Instant and Duration are convenient types for timers
+# Features
+- Concurrent execution is useful for managing multiple tasks (like navigation and immediate
+  reactions to new information) at once. To use the async functions, an executor must be used, e.g.
+  the embassy_executor.
+- Movement the bot, stabbing, scanning etc. mutate global state, this is represented by
+  encapsulating these functions in singletons that can be accessed using `Bot::take()`.
+- Radar scan data is now longer accessible after a new scan, this is represented by preventing any
+  new scans as long as not all radar scans have been dropped.
+- Bound checking radar scan
+- Instant and Duration tyes for timers
+- `Tile`, `Direction`, `Distance` types
+- `print` and `println` macros
+
+# Minimal usage example
+
+```rust
+#![no_main]
+#![no_std]
+
+use async_kartoffel::{println, Bot, Duration, Timer};
+use embassy_executor::{task, Executor};
+use static_cell::StaticCell;
+
+#[no_mangle]
+fn main() {
+    static EXECUTOR: StaticCell<Executor> = StaticCell::new();
+    let executor = EXECUTOR.init(Executor::new());
+
+    executor.run(|spawner| {
+        spawner.spawn(main_task(Bot::take())).unwrap();
+        spawner.spawn(print_task()).unwrap();
+    })
+}
+
+#[task]
+async fn main_task(mut bot: Bot) -> ! {
+    loop {
+        bot.motor.step().await;
+    }
+}
+
+#[task]
+async fn print_task() -> ! {
+    let mut counter = 0;
+    loop {
+        Timer::after(Duration::from_secs(1)).await;
+        counter += 1;
+        println!("{}", counter);
+    }
+}
+```

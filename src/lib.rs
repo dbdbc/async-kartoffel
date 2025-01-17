@@ -6,76 +6,52 @@
 extern crate alloc;
 
 mod allocator;
-mod arm;
-mod compass;
-mod motor;
+mod bot;
+mod clock;
+mod critical_section_impl;
+mod mem;
 mod panic;
-mod radar;
 mod serial;
-mod timer;
+mod world;
 
-pub use self::arm::Arm;
-pub use self::compass::{Compass, Direction, Rotation};
-pub use self::motor::Motor;
-pub use self::radar::{Radar, RadarScan, RadarScanWeak, RadarSize, D3, D5, D7, D9};
-pub use self::serial::*;
-pub use self::timer::*;
-use core::ptr;
-
-const MEM: *mut u32 = 0x08000000 as *mut u32;
-const MEM_TIMER: *mut u32 = MEM;
-const MEM_BATTERY: *mut u32 = MEM.wrapping_byte_add(1024);
-const MEM_SERIAL: *mut u32 = MEM.wrapping_byte_add(2 * 1024);
-const MEM_MOTOR: *mut u32 = MEM.wrapping_byte_add(3 * 1024);
-const MEM_ARM: *mut u32 = MEM.wrapping_byte_add(4 * 1024);
-const MEM_RADAR: *mut u32 = MEM.wrapping_byte_add(5 * 1024);
-const MEM_COMPASS: *mut u32 = MEM.wrapping_byte_add(6 * 1024);
-
-pub(crate) struct Singleton<T> {
-    instance: Option<T>,
-}
-impl<T> Singleton<T> {
-    pub fn take(&mut self) -> T {
-        let instance = core::mem::take(&mut self.instance);
-        instance.unwrap()
-    }
-}
-
-pub struct Bot {
-    pub motor: Motor,
-    pub radar: Radar,
-    pub arm: Arm,
-    pub compass: Compass,
-}
-
-impl Bot {
-    pub fn take() -> Self {
-        #[allow(static_mut_refs)]
-        Bot {
-            motor: unsafe { motor::MOTOR.take() },
-            arm: unsafe { arm::ARM.take() },
-            compass: unsafe { compass::COMPASS.take() },
-            radar: unsafe { radar::RADAR.take() },
-        }
-    }
-}
+pub use self::bot::{
+    Arm, Bot, Compass, Motor, Radar, RadarScan, RadarScanWeak, RadarSize, D3, D5, D7, D9,
+};
+pub use self::clock::{Cooldown, CooldownType, Duration, Instant, Timer};
+pub use self::serial::{SerialControlCode, SerialOutput};
+pub use self::world::{Coords, Direction, Distance, Global, Local, Position, Rotation, Tile};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum Error {
     NotReady,
     Blocked,
+    OutOfMemory,
 }
 
-#[inline(always)]
-fn rdi(ptr: *mut u32, off: usize) -> u32 {
-    unsafe { ptr::read_volatile(ptr.wrapping_add(off)) }
+#[macro_export]
+macro_rules! print {
+    ($($t:tt)*) => {{
+        use ::core::fmt::Write;
+        write!(::async_kartoffel::SerialOutput, $($t)*).unwrap();
+    }};
 }
 
+#[macro_export]
+macro_rules! println {
+    ($($t:tt)*) => {{
+        use ::core::fmt::Write;
+        writeln!(::async_kartoffel::SerialOutput, $($t)*).unwrap();
+    }};
+}
+
+/// Returns a pseudorandom number that can be used as a source of randomness
+/// for hashmaps and the like.
+///
+/// Note that this doesn't return a *new* random number each time it's called -
+/// rather the number is randomized once, when the bot is being (re)started.
 #[inline(always)]
-fn wri(ptr: *mut u32, off: usize, val: u32) {
-    unsafe {
-        ptr::write_volatile(ptr.wrapping_add(off), val);
-    }
+pub fn random_seed() -> u32 {
+    self::mem::timer_seed()
 }
 
 #[cfg(target_arch = "riscv64")]

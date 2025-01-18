@@ -24,6 +24,11 @@ impl Radar {
     pub fn is_ready(&self) -> bool {
         radar_is_ready()
     }
+    pub fn wait_blocking(&self) {
+        while !self.is_ready() {
+            //
+        }
+    }
     pub async fn wait(&self) {
         poll_fn(|cx| {
             if self.is_ready() {
@@ -271,5 +276,85 @@ pub struct RadarScanWeak<Size: RadarSize> {
 impl<Size: RadarSize> RadarScanWeak<Size> {
     pub fn upgrade(&self) -> Option<RadarScan<Size>> {
         Guard::try_create(self.uuid)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+    use crate::tests::{
+        assert, assert_eq, assert_err, assert_none, log, option_unwrap, result_unwrap, TestError,
+    };
+
+    #[test_case]
+    fn guard() -> Result<(), TestError> {
+        log!("testing guard");
+        let mut radar = Radar;
+        radar.wait_blocking();
+        log!("scan working?");
+        let scan: RadarScan<D3> = result_unwrap!(radar.try_scan());
+
+        radar.wait_blocking();
+        log!("new scan blocked?");
+        assert_err!(radar.try_scan::<D3>(), Error::Blocked);
+
+        drop(scan);
+        radar.wait_blocking();
+        log!("new scan unblocked?");
+        let scan: RadarScan<D3> = result_unwrap!(radar.try_scan());
+
+        let weak = scan.weak();
+        drop(scan);
+        log!("weak upgrade?");
+        let scan = option_unwrap!(weak.upgrade());
+        drop(scan);
+
+        radar.wait_blocking();
+        log!("new scan unblocked?");
+        let scan: RadarScan<D3> = result_unwrap!(radar.try_scan());
+        drop(scan);
+        log!("weak upgrade prevented?");
+        assert_none!(weak.upgrade());
+
+        Ok(())
+    }
+
+    #[test_case]
+    fn guard() -> Result<(), TestError> {
+        log!("testing iterators");
+        let mut radar = Radar;
+
+        fn test_iter<Size: RadarSize>(radar: &mut Radar) -> Result<(), TestError> {
+            log!("{} scan", Size::diameter());
+            radar.wait_blocking();
+            let scan: RadarScan<Size> = result_unwrap!(radar.try_scan());
+            log!("  iter");
+            let n_tiles = (Size::diameter() * Size::diameter() - 1) as usize;
+            assert_eq!(scan.iter().count(), n_tiles);
+            let mut tiles = [[false; 9]; 9];
+            for (vec, _) in scan.iter() {
+                let dist_max = vec.front().unsigned_abs().max(vec.right().unsigned_abs());
+                assert!(dist_max <= Size::R.into());
+
+                tiles[(4 + vec.right()) as usize][(4 + vec.front()) as usize] = true;
+            }
+            assert_eq!(
+                tiles
+                    .iter()
+                    .map(|row| row.iter().filter(|&&b| b).count())
+                    .sum::<usize>(),
+                n_tiles
+            );
+
+            Ok(())
+        }
+
+        test_iter::<D3>(&mut radar)?;
+        test_iter::<D5>(&mut radar)?;
+        test_iter::<D7>(&mut radar)?;
+        test_iter::<D9>(&mut radar)?;
+
+        Ok(())
     }
 }

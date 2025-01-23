@@ -14,12 +14,12 @@ Missing:
 - Concurrent execution is useful for managing multiple tasks (like navigation and immediate
   reactions to new information) at once. To use the async functions, an executor must be used, e.g.
   the embassy_executor.
-- Movement the bot, stabbing, scanning etc. mutate global state, this is represented by
+- Moving the bot, stabbing, scanning etc. mutate global state, this is represented by
   encapsulating these functions in singletons that can be accessed using `Bot::take()`.
 - Radar scan data is now longer accessible after a new scan, this is represented by preventing any
   new scans as long as not all radar scans have been dropped.
 - Bound checking radar scan
-- Instant and Duration tyes for timers
+- `Instant` and `Duration` tyes for timers
 - `Tile`, `Direction`, `Distance` types
 - `print` and `println` macros
 - Tests

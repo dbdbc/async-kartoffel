@@ -4,10 +4,12 @@ version = "0.1.0"
 edition = "2021"
 
 [features]
-default = ["serial-panic"]
+default = ["serial-panic", "critical-section-impl"]
 
 # Enables printing of the panic message to the serial port
 serial-panic = []
+# Provides an implementation for the critical-section crate
+critical-section-impl = []
 
 [dependencies]
 critical-section = "1.2.0"

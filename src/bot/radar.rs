@@ -1,4 +1,5 @@
 use critical_section::Mutex;
+use kartoffel::{is_radar_ready, radar_read, radar_scan};
 
 use crate::{Distance, Error, Local, Tile};
 use core::{
@@ -8,8 +9,6 @@ use core::{
     num::NonZeroU64,
     task::{Poll, Waker},
 };
-
-use crate::mem::{radar_get_ex, radar_is_ready, radar_scan};
 
 use super::Singleton;
 
@@ -22,7 +21,7 @@ pub(super) static mut RADAR: Singleton<Radar> = Singleton {
 
 impl Radar {
     pub fn is_ready(&self) -> bool {
-        radar_is_ready()
+        is_radar_ready()
     }
     pub fn wait_blocking(&self) {
         while !self.is_ready() {
@@ -125,8 +124,8 @@ impl Guard {
     fn try_execute_scan<Size: RadarSize>() -> Result<(), Error> {
         Self::with_critical_section(|guard| {
             if guard.n_scans == 0 {
-                if radar_is_ready() {
-                    radar_scan(Size::diameter() as u32);
+                if is_radar_ready() {
+                    radar_scan(Size::diameter() as usize);
 
                     // can fail after u32::MAX iterations
                     guard.active_uuid = guard.active_uuid.wrapping_add(1);
@@ -219,14 +218,14 @@ impl<Size: RadarSize> RadarScan<Size> {
 
     #[inline(always)]
     pub fn at_unchecked(&self, dx: i8, dy: i8) -> char {
-        radar_get_ex(Size::R, dx, dy, 0) as u8 as char
+        radar_read(Size::diameter().into(), dx, dy, 0) as u8 as char
     }
 
     #[inline(always)]
     pub fn bot_at(&self, dist: Distance<Local>) -> Option<NonZeroU64> {
         if let Some((dx, dy)) = Self::radar_indices(dist) {
-            let d1 = radar_get_ex(Size::R, dx, dy, 1) as u64;
-            let d2 = radar_get_ex(Size::R, dx, dy, 2) as u64;
+            let d1 = radar_read(Size::diameter().into(), dx, dy, 1) as u64;
+            let d2 = radar_read(Size::diameter().into(), dx, dy, 2) as u64;
             NonZeroU64::new((d1 << 32) | d2)
         } else {
             None
@@ -296,39 +295,41 @@ impl<Size: RadarSize> RadarScanWeak<Size> {
 #[cfg(test)]
 mod tests {
 
+    use kartoffel::println;
+
     use super::*;
     use crate::tests::{
-        assert, assert_eq, assert_err, assert_none, log, option_unwrap, result_unwrap, TestError,
+        assert, assert_eq, assert_err, assert_none, option_unwrap, result_unwrap, TestError,
     };
 
     #[test_case]
     fn guard() -> Result<(), TestError> {
-        log!("testing guard");
+        println!("testing guard");
         let mut radar = Radar;
         radar.wait_blocking();
-        log!("scan working?");
+        println!("scan working?");
         let scan: RadarScan<D3> = result_unwrap!(radar.try_scan());
 
         radar.wait_blocking();
-        log!("new scan blocked?");
+        println!("new scan blocked?");
         assert_err!(radar.try_scan::<D3>(), Error::Blocked);
 
         drop(scan);
         radar.wait_blocking();
-        log!("new scan unblocked?");
+        println!("new scan unblocked?");
         let scan: RadarScan<D3> = result_unwrap!(radar.try_scan());
 
         let weak = scan.weak();
         drop(scan);
-        log!("weak upgrade?");
+        println!("weak upgrade?");
         let scan = option_unwrap!(weak.upgrade());
         drop(scan);
 
         radar.wait_blocking();
-        log!("new scan unblocked?");
+        println!("new scan unblocked?");
         let scan: RadarScan<D3> = result_unwrap!(radar.try_scan());
         drop(scan);
-        log!("weak upgrade prevented?");
+        println!("weak upgrade prevented?");
         assert_none!(weak.upgrade());
 
         Ok(())
@@ -336,14 +337,14 @@ mod tests {
 
     #[test_case]
     fn guard() -> Result<(), TestError> {
-        log!("testing iterators");
+        println!("testing iterators");
         let mut radar = Radar;
 
         fn test_iter<Size: RadarSize>(radar: &mut Radar) -> Result<(), TestError> {
-            log!("{} scan", Size::diameter());
+            println!("{} scan", Size::diameter());
             radar.wait_blocking();
             let scan: RadarScan<Size> = result_unwrap!(radar.try_scan());
-            log!("  iter");
+            println!("  iter");
             let n_tiles = (Size::diameter() * Size::diameter() - 1) as usize;
             assert_eq!(scan.iter().count(), n_tiles);
             let mut tiles = [[false; 9]; 9];

@@ -12,6 +12,7 @@ serial-panic = []
 critical-section-impl = []
 
 [dependencies]
+kartoffel = { git = "https://github.com/Patryk27/kartoffels" }
 critical-section = "1.2.0"
 spin = "0.9.8"
 talc = "4.4.2"
@@ -19,3 +20,4 @@ talc = "4.4.2"
 [dev-dependencies]
 embassy-executor = { version = "0.6.3", features = ["arch-spin", "executor-thread"] }
 static_cell = "2.1.0"
+heapless = "0.8.0"

@@ -1,6 +1,8 @@
 use core::{future::poll_fn, task::Poll};
 
-use crate::{mem::compass_dir, Direction, Error};
+use kartoffel::compass_dir;
+
+use crate::{Direction, Error};
 
 use super::Singleton;
 

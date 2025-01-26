@@ -1,9 +1,7 @@
 use core::{future::poll_fn, task::Poll};
+use kartoffel::{arm_drop, arm_pick, arm_stab, is_arm_ready};
 
-use crate::{
-    mem::{arm_drop, arm_is_ready, arm_pick, arm_stab},
-    Error,
-};
+use crate::Error;
 
 use super::Singleton;
 
@@ -17,7 +15,7 @@ pub(super) static mut ARM: Singleton<Arm> = Singleton {
 impl Arm {
     #[inline(always)]
     pub fn is_ready(&self) -> bool {
-        arm_is_ready()
+        is_arm_ready()
     }
 
     #[inline(always)]

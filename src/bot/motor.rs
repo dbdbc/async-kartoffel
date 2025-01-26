@@ -1,7 +1,6 @@
-use crate::{
-    mem::{motor_is_ready, motor_step, motor_turn_left, motor_turn_right},
-    Error,
-};
+use kartoffel::{is_motor_ready, motor_step, motor_turn_left, motor_turn_right};
+
+use crate::Error;
 
 use core::{future::poll_fn, task::Poll};
 
@@ -16,7 +15,7 @@ pub(super) static mut MOTOR: Singleton<Motor> = Singleton {
 
 impl Motor {
     pub fn is_ready(&self) -> bool {
-        motor_is_ready()
+        is_motor_ready()
     }
 
     pub async fn wait(&self) {

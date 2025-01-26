@@ -4,7 +4,7 @@ use core::pin::Pin;
 use core::task::{Context, Poll};
 use core::write;
 
-use crate::mem::timer_ticks;
+use kartoffel::timer_ticks;
 
 #[derive(Clone, Copy, Eq, Ord, PartialEq, PartialOrd, Debug, Hash)]
 pub struct Instant(u32);

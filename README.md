@@ -9,6 +9,7 @@ Missing:
 - logging?
 - inventory?
 - timer queue, better wakers?
+- benchmarks and optimization
 
 # Features
 - Concurrent execution is useful for managing multiple tasks (like navigation and immediate

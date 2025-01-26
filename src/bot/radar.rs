@@ -154,30 +154,43 @@ pub trait RadarSize:
     fn diameter() -> u8 {
         Self::R * 2 + 1
     }
+    fn to_str() -> &'static str;
 }
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum D3 {}
 impl private::Sealed for D3 {}
 impl RadarSize for D3 {
     const R: u8 = 1;
+    fn to_str() -> &'static str {
+        "D3"
+    }
 }
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum D5 {}
 impl private::Sealed for D5 {}
 impl RadarSize for D5 {
     const R: u8 = 2;
+    fn to_str() -> &'static str {
+        "D5"
+    }
 }
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum D7 {}
 impl private::Sealed for D7 {}
 impl RadarSize for D7 {
     const R: u8 = 3;
+    fn to_str() -> &'static str {
+        "D7"
+    }
 }
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum D9 {}
 impl private::Sealed for D9 {}
 impl RadarSize for D9 {
     const R: u8 = 4;
+    fn to_str() -> &'static str {
+        "D9"
+    }
 }
 
 #[non_exhaustive]
@@ -205,10 +218,11 @@ impl<Size: RadarSize> RadarScan<Size> {
     }
 
     #[inline(always)]
-    fn at_unchecked(&self, dx: i8, dy: i8) -> char {
+    pub fn at_unchecked(&self, dx: i8, dy: i8) -> char {
         radar_get_ex(Size::R, dx, dy, 0) as u8 as char
     }
 
+    #[inline(always)]
     pub fn bot_at(&self, dist: Distance<Local>) -> Option<NonZeroU64> {
         if let Some((dx, dy)) = Self::radar_indices(dist) {
             let d1 = radar_get_ex(Size::R, dx, dy, 1) as u64;

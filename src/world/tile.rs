@@ -13,42 +13,42 @@ pub enum Tile {
 impl Tile {
     pub fn from_char(c: char) -> Option<Self> {
         match c {
-            '@' => Some(Tile::Bot),
-            '.' => Some(Tile::Empty),
-            ' ' => Some(Tile::Void),
-            '|' => Some(Tile::WallVertical),
-            '-' => Some(Tile::WallHorizontal),
-            '+' => Some(Tile::EntryExit),
-            '*' => Some(Tile::Diamond),
-            '=' => Some(Tile::Flag),
+            '@' => Some(Self::Bot),
+            '.' => Some(Self::Empty),
+            ' ' => Some(Self::Void),
+            '|' => Some(Self::WallVertical),
+            '-' => Some(Self::WallHorizontal),
+            '+' => Some(Self::EntryExit),
+            '*' => Some(Self::Diamond),
+            '=' => Some(Self::Flag),
             _ => None,
         }
     }
     pub const fn to_char(self) -> char {
         match self {
-            Tile::Bot => '@',
-            Tile::Empty => '.',
-            Tile::Void => ' ',
-            Tile::WallVertical => '|',
-            Tile::WallHorizontal => '-',
-            Tile::EntryExit => '+',
-            Tile::Diamond => '*',
-            Tile::Flag => '=',
+            Self::Bot => '@',
+            Self::Empty => '.',
+            Self::Void => ' ',
+            Self::WallVertical => '|',
+            Self::WallHorizontal => '-',
+            Self::EntryExit => '+',
+            Self::Diamond => '*',
+            Self::Flag => '=',
         }
     }
     pub const fn is_empty(self) -> bool {
-        matches!(self, Tile::Empty)
+        matches!(self, Self::Empty)
     }
     pub const fn is_walkable_terrain(self) -> bool {
         matches!(
             self,
-            Tile::Empty | Tile::Bot | Tile::EntryExit | Tile::Diamond | Tile::Flag
+            Self::Empty | Self::Bot | Self::EntryExit | Self::Diamond | Self::Flag
         )
     }
     pub const fn is_bot(self) -> bool {
-        matches!(self, Tile::Bot)
+        matches!(self, Self::Bot)
     }
     pub const fn is_item(self) -> bool {
-        matches!(self, Tile::Diamond | Tile::Flag)
+        matches!(self, Self::Diamond | Self::Flag)
     }
 }

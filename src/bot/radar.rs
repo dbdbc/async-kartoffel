@@ -7,6 +7,7 @@ use core::{
     future::poll_fn,
     marker::PhantomData,
     num::NonZeroU64,
+    ops::RangeInclusive,
     task::{Poll, Waker},
 };
 
@@ -152,6 +153,9 @@ pub trait RadarSize:
     const R: u8;
     fn diameter() -> u8 {
         Self::R * 2 + 1
+    }
+    fn range() -> RangeInclusive<i8> {
+        -(Self::R as i8)..=Self::R as i8
     }
     fn to_str() -> &'static str;
 }

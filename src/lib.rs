@@ -7,6 +7,7 @@
 
 extern crate alloc;
 
+pub mod algorithm;
 mod bot;
 mod clock;
 #[cfg(feature = "critical-section-impl")]
@@ -27,6 +28,8 @@ pub enum Error {
     NotReady,
     Blocked,
     OutOfMemory,
+    Inconsistent,
+    NoTargetError,
 }
 
 #[inline(always)]

@@ -1,5 +1,5 @@
 # async-kartoffel
-An asynchronous alternative firmware for [kartoffels by
+An asynchronous abstraction layer for [kartoffels by
 Patryk27](https://github.com/Patryk27/kartoffels/)
 
 # Work in progress 🚧
@@ -17,7 +17,7 @@ Missing:
   the embassy_executor.
 - Moving the bot, stabbing, scanning etc. mutate global state, this is represented by
   encapsulating these functions in singletons that can be accessed using `Bot::take()`.
-- Radar scan data is now longer accessible after a new scan, this is represented by preventing any
+- Radar scan data is no longer accessible after a new scan, this is achieved by preventing any
   new scans as long as not all radar scans have been dropped.
 - Bound checking radar scan
 - `Instant` and `Duration` tyes for timers

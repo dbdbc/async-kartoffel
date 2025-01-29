@@ -238,8 +238,8 @@ impl<Size: RadarSize> RadarScan<Size> {
 
     /// Scanned tiles matching tile excluding (0, 0), this is e.g. useful to find only enemy bots
     pub fn iter_tile(&self, tile: Tile) -> impl Iterator<Item = Distance<Local>> + use<'_, Size> {
-        (-(Size::R as i8)..=Size::R as i8).flat_map(move |dx| {
-            (-(Size::R as i8)..=Size::R as i8)
+        Size::range().flat_map(move |dx| {
+            Size::range()
                 .filter(move |dy| {
                     self.at_unchecked(dx, *dy) == tile.to_char() && !(dx == 0 && *dy == 0)
                 })
@@ -249,8 +249,8 @@ impl<Size: RadarSize> RadarScan<Size> {
 
     /// iterate over scanned tiles excluding (0, 0)
     pub fn iter(&self) -> impl Iterator<Item = (Distance<Local>, Tile)> + use<'_, Size> {
-        (-(Size::R as i8)..=Size::R as i8).flat_map(move |dx| {
-            (-(Size::R as i8)..=Size::R as i8)
+        Size::range().flat_map(move |dx| {
+            Size::range()
                 .filter(move |dy| !(dx == 0 && *dy == 0))
                 .map(move |dy| {
                     (

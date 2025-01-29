@@ -296,15 +296,11 @@ impl<T: Map<Option<NonZeroU16>>, const N: usize> Navigation<T, N> {
     /// handles Option<NonZeroU16> and addition of 1
     fn distances_set(distances: &mut T, pos: Position, distance: u16) -> Result<(), Error> {
         distances
-            .set(pos, Some(NonZeroU16::new(1 + distance)).unwrap())
+            .set(pos, NonZeroU16::new(1 + distance))
             .map_err(|_| Error::OutOfMemory)
     }
     fn distances_known(distances: &T, pos: Position) -> bool {
-        if let Some(Some(_dist)) = distances.get(pos) {
-            true
-        } else {
-            false
-        }
+        matches!(distances.get(pos), Some(Some(_dist)))
     }
 
     // only reason this function exists is to use nice ? semantics

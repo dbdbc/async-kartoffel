@@ -3,7 +3,7 @@ use kartoffel::println;
 
 use crate::{Direction, Distance, Error, Global, Position, RadarScan, RadarSize, Rotation};
 
-use super::chunk_map::{Chunk, ChunkIndex, ChunkMap, InChunkIndex};
+use super::chunk_map::{Chunk, ChunkIndex, ChunkLocation, ChunkMap};
 
 #[derive(Clone, Copy, Debug, Hash, Ord, PartialOrd, Eq, PartialEq)]
 pub enum Terrain {
@@ -71,8 +71,8 @@ impl Terrain {
         Self::from_last_bits((byte >> (index * 2)) & 0b11)
     }
     fn set_in_byte(self, byte: u8, index: u8) -> u8 {
-        let current_shifted = byte & (0b11 << index * 2);
-        let bits_shifted = self.to_last_bits() << index * 2;
+        let current_shifted = byte & (0b11 << (index * 2));
+        let bits_shifted = self.to_last_bits() << (index * 2);
         let xor = current_shifted ^ bits_shifted;
         byte ^ xor
     }
@@ -84,13 +84,13 @@ struct ChunkTerrain {
     value: [u8; 16],
 }
 impl Chunk<Terrain> for ChunkTerrain {
-    fn get(&self, index: InChunkIndex) -> Terrain {
+    fn get(&self, index: ChunkIndex) -> Terrain {
         let i1 = index.index64().div_euclid(4);
         let i2 = index.index64().rem_euclid(4);
         Terrain::get_in_byte(self.value[i1 as usize], i2)
     }
 
-    fn set(&mut self, index: InChunkIndex, item: Terrain) {
+    fn set(&mut self, index: ChunkIndex, item: Terrain) {
         let i1 = index.index64().div_euclid(4);
         let i2 = index.index64().rem_euclid(4);
         self.value[i1 as usize] = item.set_in_byte(self.value[i1 as usize], i2);
@@ -108,13 +108,13 @@ impl ChunkTerrain {
     /// center: relative to south west corner (0, 0 - corner in in_chunk coords)
     /// Fails if a tile would be changed from an already known state. This can happen, if we tried
     /// to walked into another bot, and is probably really annoying to repair.
-    fn update_from_radar<D: RadarSize>(
+    fn update_from_radar<Size: RadarSize>(
         &mut self,
-        radar: &RadarScan<D>,
+        radar: &RadarScan<Size>,
         center: Distance<Global>,
         direction: Direction,
     ) -> (Self, Result<(), Error>) {
-        let r: i16 = D::R as i16;
+        let r: i16 = Size::R as i16;
         let mut new_self = self.clone();
         let mut map_changed = false;
         for east in (center.east() - r).clamp(0, 7)..=(center.east() + r).clamp(0, 7) {
@@ -125,7 +125,7 @@ impl ChunkTerrain {
                     .at(dist_from_center.local(direction))
                     .unwrap()
                     .is_walkable_terrain();
-                let in_chunk_index = InChunkIndex::new(east as u8, north as u8);
+                let in_chunk_index = ChunkIndex::new(east as u8, north as u8);
                 match new_self.get(in_chunk_index).is_walkable() {
                     None => new_self.set(in_chunk_index, Terrain::from_walkable(walkable)),
                     Some(current_walkable) => {
@@ -147,22 +147,22 @@ impl ChunkTerrain {
 }
 
 impl<const N: usize> ChunkMap<N, Terrain, ChunkTerrain> {
-    pub fn update<D: RadarSize>(
+    pub fn update<Size: RadarSize>(
         &mut self,
-        radar: &RadarScan<D>,
+        radar: &RadarScan<Size>,
         pos: Position,
         direction: Direction,
     ) -> Result<(), crate::Error> {
-        let dist = Distance::new_global(D::R as i16, D::R as i16);
+        let dist = Distance::new_global(Size::R as i16, Size::R as i16);
         // unique chunks, since maximum scan size is 9 the scan is guaranteed to fit into 4 chunks
-        let chunks: FnvIndexSet<ChunkIndex, 4> = Rotation::all()
+        let chunks: FnvIndexSet<ChunkLocation, 4> = Rotation::all()
             .into_iter()
             .map(|rot| Self::to_chunk_pos(pos + dist.rotate(rot)).0)
             .collect();
 
         for chunk_index in chunks.into_iter() {
             let chunk = self.get_mut_chunk_or_new(*chunk_index)?;
-            let in_chunk_coords = pos - chunk_index.to_pos();
+            let in_chunk_coords = pos - chunk_index.south_west_pos();
             let (updated, result) = chunk.update_from_radar(radar, in_chunk_coords, direction);
             *chunk = updated;
             if result.is_err() {

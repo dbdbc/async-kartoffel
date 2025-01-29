@@ -8,8 +8,8 @@ mod terrain;
 
 pub use chunk_map::ChunkBool;
 pub use chunk_map::ChunkIndex;
+pub use chunk_map::ChunkLocation;
 pub use chunk_map::ChunkMap;
-pub use chunk_map::InChunkIndex;
 pub use chunk_map::IterInChunk;
 pub use exploration::Exploration;
 pub use map::Map;

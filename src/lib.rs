@@ -7,7 +7,7 @@
 
 extern crate alloc;
 
-// pub mod algorithm;
+pub mod algorithm;
 mod bot;
 mod clock;
 #[cfg(feature = "critical-section-impl")]

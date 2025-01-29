@@ -1,9 +1,8 @@
 use core::{convert::identity, fmt::Display, marker::PhantomData};
 
 use heapless::{FnvIndexSet, Vec};
-use kartoffel::println;
 
-use crate::{algorithm::breakpoint::Breakpoint, Distance, Error, Position, RadarSize};
+use crate::{algorithm::breakpoint::Breakpoint, Distance, Error, Position, RadarScan, RadarSize};
 
 use super::{terrain::Terrain, Map};
 
@@ -34,6 +33,9 @@ impl<T> State<T> {
             Self::Completed => State::Completed,
             Self::Error => State::Error,
         }
+    }
+    pub fn is_complete(&self) -> bool {
+        matches!(self, Self::Completed)
     }
 }
 
@@ -71,10 +73,6 @@ impl<const N: usize> State<Progress<N>> {
                 state
             }
         });
-    }
-
-    pub fn is_complete(&self) -> bool {
-        matches!(self, Self::Completed)
     }
 }
 
@@ -181,14 +179,26 @@ impl<const N: usize, T: Map<Terrain>> Exploration<N, T> {
                 if progress.stale.is_empty() {
                     self.state = State::Completed;
                 } else {
-                    println!("halting, stale: {}", progress.stale.iter().count());
+                    // TODO remove
+                    // println!("halting, stale: {}", progress.stale.iter().count());
                     self.state.halt();
                 }
             }
         }
     }
 
-    pub fn activate<Size: RadarSize>(&mut self, center: Position) -> Result<(), Error> {
+    /// Notify that the map has been updated.
+    /// Does not require scan, but taking it as argument ensures a compile time error if scan size
+    /// is wrong.
+    pub fn activate<Size: RadarSize>(
+        &mut self,
+        center: Position,
+        _scan: &RadarScan<Size>,
+    ) -> Result<(), Error> {
+        self.activate_any::<Size>(center)
+    }
+
+    pub fn activate_any<Size: RadarSize>(&mut self, center: Position) -> Result<(), Error> {
         match &mut self.state {
             State::Ready => (),
             State::Running(progress) => {

@@ -211,6 +211,10 @@ impl<Size: RadarSize> RadarScan<Size> {
         Distance::new_local(dx.into(), (-dy).into())
     }
 
+    pub fn contains(&self, dist: Distance<Local>) -> bool {
+        Self::radar_indices(dist).is_some()
+    }
+
     pub fn at(&self, dist: Distance<Local>) -> Option<Tile> {
         if let Some((dx, dy)) = Self::radar_indices(dist) {
             // unwrap: unknown tile means error

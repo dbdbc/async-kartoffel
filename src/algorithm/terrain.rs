@@ -80,7 +80,7 @@ impl Terrain {
 
 #[derive(Clone)]
 /// memory efficient Chunk for Terrain
-struct ChunkTerrain {
+pub struct ChunkTerrain {
     value: [u8; 16],
 }
 impl Chunk<Terrain> for ChunkTerrain {

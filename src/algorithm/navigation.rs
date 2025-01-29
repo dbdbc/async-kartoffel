@@ -155,6 +155,9 @@ impl State<NavigationTask> {
             State::Impossible(task) => Some(*task),
         }
     }
+    pub fn is_success(&self) -> bool {
+        matches!(self, Self::Success(_))
+    }
 }
 
 impl<const N: usize> State<Progress<N>> {

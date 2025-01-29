@@ -1,4 +1,4 @@
-use crate::{Coords, Distance};
+use crate::{Coords, Direction, Distance, Global, Rotation};
 
 pub trait DistanceMeasure: Clone + 'static {
     fn measure<C: Coords>(dist: Distance<C>) -> u16;
@@ -58,4 +58,20 @@ impl DistanceMeasure for DistBotStab {
             (max * 2 + 1 + min * 2).saturating_sub(4) // forward, turn, forward
         }
     }
+}
+
+pub fn dist_walk_with_rotation(dist: Distance<Global>, facing: Direction) -> u16 {
+    // additional initial rotations not covered by DistBotWalk
+    let n_rotations = match (
+        dist.get(facing),
+        dist.get(facing + Rotation::Left).unsigned_abs(),
+    ) {
+        (..0, 0) => 2,
+        (..0, 1..) => 1,
+        (0, 0) => 0,
+        (0, 1..) => 1,
+        (1.., _) => 0,
+    };
+
+    n_rotations + DistBotWalk::measure(dist)
 }

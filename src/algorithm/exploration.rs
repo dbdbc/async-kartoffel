@@ -2,9 +2,13 @@ use core::{convert::identity, fmt::Display, marker::PhantomData};
 
 use heapless::{FnvIndexSet, Vec};
 
-use crate::{algorithm::breakpoint::Breakpoint, Distance, Error, Position, RadarScan, RadarSize};
+use crate::{algorithm::breakpoint::Breakpoint, Distance, Position, RadarScan, RadarSize};
 
-use super::{terrain::Terrain, Map};
+use super::{
+    error::{MapError, MapInconsistent, OutOfMemory},
+    terrain::Terrain,
+    Map,
+};
 
 #[derive(Debug)]
 struct Progress<const N: usize> {
@@ -99,24 +103,27 @@ fn get_terrain(map: &impl Map<Terrain>, pos: Position) -> Terrain {
     map.get(pos).unwrap_or(Terrain::Unknown)
 }
 
-fn set_reachable(map: &mut impl Map<Terrain>, pos: Position, reachable: bool) -> Result<(), Error> {
+fn set_reachable(
+    map: &mut impl Map<Terrain>,
+    pos: Position,
+    reachable: bool,
+) -> Result<(), MapError> {
     match map.get(pos) {
         Some(Terrain::Unknown) => panic!(),
         Some(Terrain::Blocked) => {
             if reachable {
-                Err(Error::Inconsistent)
+                Err(MapInconsistent.into())
             } else {
                 Ok(())
             }
         }
         Some(Terrain::Walkable) | Some(Terrain::Reachable) => {
             if reachable {
-                map.set(pos, Terrain::Reachable)
-                    .map_err(|_| Error::OutOfMemory)?;
+                map.set(pos, Terrain::Reachable).map_err(|_| OutOfMemory)?;
                 Ok(())
             } else {
                 // TODO represent unreachable but walkable?
-                Err(Error::Inconsistent)
+                Err(MapInconsistent.into())
             }
         }
         None => panic!(),
@@ -147,22 +154,19 @@ impl<const N: usize, T: Map<Terrain>> Exploration<N, T> {
             progress: &mut Progress<N>,
             map: &mut T,
             pos: Position,
-        ) -> Result<(), Error> {
+        ) -> Result<(), OutOfMemory> {
             match get_terrain(map, pos).is_walkable() {
                 Some(walkable) => {
-                    set_reachable(map, pos, walkable).map_err(|_| Error::OutOfMemory)?;
+                    set_reachable(map, pos, walkable).map_err(|_| OutOfMemory)?;
                     if walkable {
                         for (neighbor, _) in pos.neighbors() {
                             if get_terrain(map, neighbor).is_reachable().is_none() {
-                                progress
-                                    .active
-                                    .push(neighbor)
-                                    .map_err(|_| Error::OutOfMemory)?;
+                                progress.active.push(neighbor).map_err(|_| OutOfMemory)?;
                             }
                         }
                     }
                 }
-                None => _ = progress.stale.insert(pos).map_err(|_| Error::OutOfMemory)?,
+                None => _ = progress.stale.insert(pos).map_err(|_| OutOfMemory)?,
             }
             Ok(())
         }
@@ -194,11 +198,11 @@ impl<const N: usize, T: Map<Terrain>> Exploration<N, T> {
         &mut self,
         center: Position,
         _scan: &RadarScan<Size>,
-    ) -> Result<(), Error> {
+    ) -> Result<(), OutOfMemory> {
         self.activate_any::<Size>(center)
     }
 
-    pub fn activate_any<Size: RadarSize>(&mut self, center: Position) -> Result<(), Error> {
+    pub fn activate_any<Size: RadarSize>(&mut self, center: Position) -> Result<(), OutOfMemory> {
         match &mut self.state {
             State::Ready => (),
             State::Running(progress) => {
@@ -206,7 +210,7 @@ impl<const N: usize, T: Map<Terrain>> Exploration<N, T> {
                     for i_north in Size::range() {
                         let pos = center + Distance::new_global(i_east.into(), i_north.into());
                         if progress.stale.remove(&pos) {
-                            progress.active.push(pos).map_err(|_| Error::OutOfMemory)?;
+                            progress.active.push(pos).map_err(|_| OutOfMemory)?;
                         }
                     }
                 }
@@ -216,7 +220,7 @@ impl<const N: usize, T: Map<Terrain>> Exploration<N, T> {
                     for i_north in Size::range() {
                         let pos = center + Distance::new_global(i_east.into(), i_north.into());
                         if progress.stale.remove(&pos) {
-                            progress.active.push(pos).map_err(|_| Error::OutOfMemory)?;
+                            progress.active.push(pos).map_err(|_| OutOfMemory)?;
                         }
                     }
                 }

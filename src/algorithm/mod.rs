@@ -1,7 +1,9 @@
 mod breakpoint;
 mod chunk_map;
+mod error;
 mod exploration;
 mod map;
+mod math;
 mod measure;
 mod navigation;
 mod terrain;
@@ -15,6 +17,7 @@ pub use chunk_map::IterInChunk;
 pub use exploration::Exploration;
 pub use exploration::State as ExplorationState;
 pub use map::Map;
+pub use math::isqrt;
 pub use measure::dist_walk_with_rotation;
 pub use measure::DistBotStab;
 pub use measure::DistBotWalk;

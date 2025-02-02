@@ -1,9 +1,9 @@
 use core::{marker::PhantomData, ops::Add};
 
-use crate::{Distance, Error, Global, Position};
+use crate::{Distance, Global, Position};
 use heapless::FnvIndexMap;
 
-use super::map::Map;
+use super::{error::OutOfMemory, map::Map};
 
 /// Location in chunk, between (0, 0)..=(7, 7)
 #[derive(Clone, PartialEq, Eq, Ord, PartialOrd, Hash, Debug, Copy)]
@@ -146,11 +146,9 @@ impl<const N: usize, T, C: Chunk<T>> ChunkMap<N, T, C> {
     }
     /// Return a mutable reference to the chunk at the given index. If it does not exist yet, it
     /// will be created first.
-    pub fn get_mut_chunk_or_new(&mut self, index: ChunkLocation) -> Result<&mut C, Error> {
+    pub fn get_mut_chunk_or_new(&mut self, index: ChunkLocation) -> Result<&mut C, OutOfMemory> {
         if !self.data.contains_key(&index) {
-            self.data
-                .insert(index, C::new())
-                .map_err(|_| Error::OutOfMemory)?;
+            self.data.insert(index, C::new()).map_err(|_| OutOfMemory)?;
         }
         // unwrap: we just made sure it exists
         Ok(self.data.get_mut(&index).unwrap())

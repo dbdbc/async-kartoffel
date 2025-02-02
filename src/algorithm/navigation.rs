@@ -1,9 +1,9 @@
 use core::num::NonZeroU16;
 
-use crate::{println, Direction, Error, Position};
-use heapless::Vec;
+use crate::{algorithm::error::NoTarget, Direction, Position};
+use heapless::{FnvIndexMap, Vec};
 
-use super::{breakpoint::Breakpoint, DistManhattan, DistanceMeasure, Map};
+use super::{breakpoint::Breakpoint, error::OutOfMemory, DistManhattan, DistanceMeasure, Map};
 
 // possibly implemented as bitfield
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Default)]
@@ -52,7 +52,7 @@ struct Progress<const N: usize> {
     active_current: Vec<Position, N>,
 
     /// Active positions with cost larger than [`Self::cost_current`]
-    active_next: Vec<(Position, u16), N>,
+    active_next: FnvIndexMap<Position, u16, N>,
 
     /// The cost for every item in [`Self::active_current`]. For a given active position, cost is
     /// calculated as distance_manhattan between the position and [NavigationTask::from], plus
@@ -70,29 +70,17 @@ impl<const N: usize> Progress<N> {
         self.cost_current = cost_minimum;
 
         // move items with cost_minimum from active_next to active_current
-        let mut index: usize = 0;
-        while index < self.active_next.len() {
-            let (pos, cost) = self.active_next[index];
+        for (&pos, &cost) in &self.active_next {
             assert!(cost >= cost_minimum);
             if cost == cost_minimum {
                 // unwrap: same size for both vecs
                 self.active_current.push(pos).unwrap();
-
-                if index + 1 < self.active_next.len() {
-                    // overwrite with last element
-                    // unwrap: while loop condition guarantees vec has elements
-                    self.active_next[index] = self.active_next.pop().unwrap();
-                } else {
-                    // this already was the last element
-                    // unwrap: while loop condition guarantees vec has elements
-                    self.active_next.pop().unwrap();
-                }
-            } else {
-                index += 1;
             }
         }
+        self.active_next
+            .retain(|_pos, &mut cost| cost > cost_minimum);
     }
-    fn change_start(&mut self, new_start: Position) -> Result<(), Error> {
+    fn change_start(&mut self, new_start: Position) -> Result<(), OutOfMemory> {
         if new_start == self.task.from {
             return Ok(());
         }
@@ -110,16 +98,16 @@ impl<const N: usize> Progress<N> {
         };
 
         // update all costs, push everything into active_next, so active_current is empty
-        for (pos, cost) in self.active_next.iter_mut() {
-            *cost = new_cost(*cost, *pos);
+        for (&pos, cost) in self.active_next.iter_mut() {
+            *cost = new_cost(*cost, pos);
         }
         while let Some(pos) = self.active_current.pop() {
             self.active_next
-                .push((pos, new_cost(self.cost_current, pos)))
-                .map_err(|_| Error::OutOfMemory)?;
+                .insert(pos, new_cost(self.cost_current, pos))
+                .map_err(|_| OutOfMemory)?;
         }
 
-        if let Some(cost_minimum) = self.active_next.iter().map(|&(_pos, cost)| cost).min() {
+        if let Some(cost_minimum) = self.active_next.iter().map(|(_pos, &cost)| cost).min() {
             self.set_new_current_cost(cost_minimum);
         }
         Ok(())
@@ -131,7 +119,7 @@ pub enum State<T> {
     Ready,
     Running(T),
     Success(T),
-    Error,
+    Error(OutOfMemory),
     Impossible(T),
 }
 impl<const N: usize> State<Progress<N>> {
@@ -140,7 +128,7 @@ impl<const N: usize> State<Progress<N>> {
             State::Ready => State::Ready,
             State::Running(progress) => State::Running(progress.task),
             State::Success(progress) => State::Success(progress.task),
-            State::Error => State::Error,
+            State::Error(err) => State::Error(*err),
             State::Impossible(progress) => State::Impossible(progress.task),
         }
     }
@@ -151,7 +139,7 @@ impl State<NavigationTask> {
             State::Ready => None,
             State::Running(task) => Some(*task),
             State::Success(task) => Some(*task),
-            State::Error => None,
+            State::Error(_) => None,
             State::Impossible(task) => Some(*task),
         }
     }
@@ -164,7 +152,7 @@ impl<const N: usize> State<Progress<N>> {
     fn with(&mut self, f: impl FnOnce(Self) -> Self) {
         // This seems to optimize the stack allocation away for simple functions, but is it not
         // guaranteed. Invalidate self, take ownership, perform mutation and set self again.
-        *self = f(core::mem::replace(self, Self::Error));
+        *self = f(core::mem::replace(self, Self::Error(OutOfMemory)));
     }
     /// change state to [`State::Success`] without heap allocations
     fn success(&mut self) {
@@ -190,8 +178,8 @@ impl<const N: usize> State<Progress<N>> {
             _ => state,
         });
     }
-    fn error(&mut self) {
-        *self = State::Error;
+    fn error(&mut self, err: OutOfMemory) {
+        *self = State::Error(err);
     }
 }
 
@@ -207,7 +195,7 @@ impl core::fmt::Display for NavigationTask {
     }
 }
 
-/// A interruptable complex navigation computation to a fixed target.
+/// A interruptable navigation computation to a fixed target.
 pub struct Navigation<T: Map<Option<NonZeroU16>>, const N: usize> {
     /// Actually does not store distance, but distance plus one, to take advantage of niche
     /// optimizations. It should only be modified using [`Self::distances_set`] to prevent errors.
@@ -258,11 +246,12 @@ impl<T: Map<Option<NonZeroU16>>, const N: usize> Navigation<T, N> {
         self.state.strip_data()
     }
 
-    pub fn update_start(&mut self, new_start: Position) -> Result<(), Error> {
+    // TODO implement lazy, and add actual computation to run
+    pub fn update_start(&mut self, new_start: Position) -> Result<(), NoTarget> {
         enum StateWithoutData {
             Success,
             Running,
-            Error,
+            Error(OutOfMemory),
         }
 
         fn update_task<T: Map<Option<NonZeroU16>>, const N: usize>(
@@ -278,7 +267,7 @@ impl<T: Map<Option<NonZeroU16>>, const N: usize> Navigation<T, N> {
                         StateWithoutData::Running
                     }
                 }
-                Err(_) => StateWithoutData::Error,
+                Err(err) => StateWithoutData::Error(err),
             }
         }
 
@@ -286,28 +275,48 @@ impl<T: Map<Option<NonZeroU16>>, const N: usize> Navigation<T, N> {
             State::Running(progress) => update_task(&mut self.distances, progress, new_start),
             State::Success(progress) => update_task(&mut self.distances, progress, new_start),
             State::Impossible(progress) => update_task(&mut self.distances, progress, new_start),
-            _ => return Err(Error::NoTargetError),
+            _ => return Err(NoTarget),
         };
         match result {
             StateWithoutData::Success => self.state.success(),
             StateWithoutData::Running => self.state.running(),
-            StateWithoutData::Error => self.state = State::Error,
+            StateWithoutData::Error(err) => self.state = State::Error(err),
         }
         Ok(())
     }
 
     /// handles Option<NonZeroU16> and addition of 1
-    fn distances_set(distances: &mut T, pos: Position, distance: u16) -> Result<(), Error> {
+    fn distances_set(distances: &mut T, pos: Position, distance: u16) -> Result<(), OutOfMemory> {
         distances
             .set(pos, NonZeroU16::new(1 + distance))
-            .map_err(|_| Error::OutOfMemory)
+            .map_err(|_| OutOfMemory)
     }
-    fn distances_known(distances: &T, pos: Position) -> bool {
-        matches!(distances.get(pos), Some(Some(_dist)))
+    fn distances_get(distances: &T, pos: Position) -> Option<u16> {
+        match distances.get(pos) {
+            Some(Some(dist)) => Some(u16::from(dist) - 1),
+            _ => None,
+        }
+    }
+
+    /// for debugging purposes
+    pub fn n_active(&self) -> Option<(usize, usize)> {
+        match &self.state {
+            State::Ready => None,
+            State::Running(progress) => {
+                Some((progress.active_current.len(), progress.active_next.len()))
+            }
+            State::Success(progress) => {
+                Some((progress.active_current.len(), progress.active_next.len()))
+            }
+            State::Error(_) => None,
+            State::Impossible(progress) => {
+                Some((progress.active_current.len(), progress.active_next.len()))
+            }
+        }
     }
 
     // only reason this function exists is to use nice ? semantics
-    async fn run_internal(&mut self, can_go: impl Fn(Position) -> bool) -> Result<(), Error> {
+    async fn run_internal(&mut self, can_go: impl Fn(Position) -> bool) -> Result<(), OutOfMemory> {
         if let State::Running(progress) = &mut self.state {
             if !can_go(progress.task.to) {
                 self.state.impossible();
@@ -331,26 +340,37 @@ impl<T: Map<Option<NonZeroU16>>, const N: usize> Navigation<T, N> {
                                 self.state.success();
                                 return Ok(());
                             }
-                            if !Self::distances_known(&self.distances, neighbor) && can_go(neighbor)
-                            {
-                                Self::distances_set(
-                                    &mut self.distances,
-                                    neighbor,
-                                    distance_neighbor,
-                                )?;
-                                let cost_neighbor = distance_neighbor
-                                    + DistManhattan::measure(neighbor - progress.task.from);
-                                assert!(cost_neighbor >= progress.cost_current);
-                                if cost_neighbor == progress.cost_current {
-                                    progress
-                                        .active_current
-                                        .push(neighbor)
-                                        .map_err(|_| Error::OutOfMemory)?;
-                                } else {
-                                    progress
-                                        .active_next
-                                        .push((neighbor, cost_neighbor))
-                                        .map_err(|_| Error::OutOfMemory)?;
+                            // TODO check for lower cost???
+                            let dist_neighbor_prev = Self::distances_get(&self.distances, neighbor);
+                            if can_go(neighbor) {
+                                if dist_neighbor_prev
+                                    .is_none_or(|dist_prev| dist_prev > distance_neighbor)
+                                {
+                                    Self::distances_set(
+                                        &mut self.distances,
+                                        neighbor,
+                                        distance_neighbor,
+                                    )?;
+                                    let cost_neighbor = distance_neighbor
+                                        + DistManhattan::measure(neighbor - progress.task.from);
+                                    if cost_neighbor == progress.cost_current {
+                                        progress
+                                            .active_current
+                                            .push(neighbor)
+                                            .map_err(|_| OutOfMemory)?;
+                                        // Required in case dist_neighbor_prev existed.
+                                        // Double push of the same position into active_current is
+                                        // not possible, because we require an improvement to cost
+                                        // (distance_neighbor < dist_prev)
+                                        progress.active_next.remove(&neighbor);
+                                    } else if cost_neighbor > progress.cost_current {
+                                        progress
+                                            .active_next
+                                            .insert(neighbor, cost_neighbor)
+                                            .map_err(|_| OutOfMemory)?;
+                                    } else {
+                                        assert!(false);
+                                    }
                                 }
                             }
                         }
@@ -365,6 +385,8 @@ impl<T: Map<Option<NonZeroU16>>, const N: usize> Navigation<T, N> {
                         return Ok(());
                     }
 
+                    // Why increase by 2? Because cost is either odd or even, but the same, for all
+                    // paths
                     progress.set_new_current_cost(progress.cost_current + 2);
                 }
             }
@@ -375,8 +397,7 @@ impl<T: Map<Option<NonZeroU16>>, const N: usize> Navigation<T, N> {
 
     pub async fn run(&mut self, can_go: impl Fn(Position) -> bool) {
         if let Err(err) = self.run_internal(can_go).await {
-            self.state.error();
-            println!("Error: navigation {:?}", err);
+            self.state.error(err);
         }
     }
 
@@ -392,5 +413,9 @@ impl<T: Map<Option<NonZeroU16>>, const N: usize> Navigation<T, N> {
             }
         }
         ret
+    }
+
+    pub fn get_dist_at(&self, pos: Position) -> Option<u16> {
+        Self::distances_get(&self.distances, pos)
     }
 }

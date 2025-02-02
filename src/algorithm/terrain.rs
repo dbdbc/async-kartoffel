@@ -1,9 +1,11 @@
-use heapless::FnvIndexSet;
-use kartoffel::println;
+use heapless::Vec;
 
-use crate::{Direction, Distance, Error, Global, Position, RadarScan, RadarSize, Rotation};
+use crate::{Direction, Distance, Global, Position, RadarScan, RadarSize, Rotation};
 
-use super::chunk_map::{Chunk, ChunkIndex, ChunkLocation, ChunkMap};
+use super::{
+    chunk_map::{Chunk, ChunkIndex, ChunkLocation, ChunkMap},
+    error::{MapError, MapInconsistent},
+};
 
 #[derive(Clone, Copy, Debug, Hash, Ord, PartialOrd, Eq, PartialEq)]
 pub enum Terrain {
@@ -113,7 +115,7 @@ impl ChunkTerrain {
         radar: &RadarScan<Size>,
         center: Distance<Global>,
         direction: Direction,
-    ) -> (Self, Result<(), Error>) {
+    ) -> Result<Self, MapInconsistent> {
         let r: i16 = Size::R as i16;
         let mut new_self = self.clone();
         let mut map_changed = false;
@@ -136,13 +138,10 @@ impl ChunkTerrain {
                 }
             }
         }
-        (
-            new_self,
-            match map_changed {
-                true => Err(Error::Inconsistent),
-                false => Ok(()),
-            },
-        )
+        match map_changed {
+            true => Err(MapInconsistent),
+            false => Ok(new_self),
+        }
     }
 }
 
@@ -152,22 +151,27 @@ impl<const N: usize> ChunkMap<N, Terrain, ChunkTerrain> {
         radar: &RadarScan<Size>,
         pos: Position,
         direction: Direction,
-    ) -> Result<(), crate::Error> {
+    ) -> Result<(), MapError> {
         let dist = Distance::new_global(Size::R as i16, Size::R as i16);
         // unique chunks, since maximum scan size is 9 the scan is guaranteed to fit into 4 chunks
-        let chunks: FnvIndexSet<ChunkLocation, 4> = Rotation::all()
+        let locations: Vec<ChunkLocation, 4> = Rotation::all()
             .into_iter()
             .map(|rot| Self::to_chunk_pos(pos + dist.rotate(rot)).0)
             .collect();
 
-        for chunk_index in chunks.into_iter() {
-            let chunk = self.get_mut_chunk_or_new(*chunk_index)?;
-            let in_chunk_coords = pos - chunk_index.south_west_pos();
-            let (updated, result) = chunk.update_from_radar(radar, in_chunk_coords, direction);
-            *chunk = updated;
-            if result.is_err() {
-                println!("Warning: Map update detected an inconsistency!");
-            }
+        let mut results = Vec::<ChunkTerrain, 4>::new();
+        for &location in locations.iter() {
+            let chunk = self.get_mut_chunk_or_new(location)?;
+            let in_chunk_coords = pos - location.south_west_pos();
+            let updated = chunk.update_from_radar(radar, in_chunk_coords, direction)?;
+            // can't fail
+            _ = results.push(updated);
+        }
+
+        // only write updates once we are sure they are consistent with the map
+        for (location, update) in locations.into_iter().zip(results) {
+            // unwrap(): we already ensured it exists
+            *self.get_mut_chunk_or_new(location).unwrap() = update;
         }
         Ok(())
     }

@@ -1,5 +1,6 @@
 mod arm;
 mod compass;
+pub mod error;
 mod motor;
 mod radar;
 

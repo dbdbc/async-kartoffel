@@ -1,9 +1,7 @@
 use core::{future::poll_fn, task::Poll};
 use kartoffel::{arm_drop, arm_pick, arm_stab, is_arm_ready};
 
-use crate::Error;
-
-use super::Singleton;
+use super::{error::NotReady, Singleton};
 
 #[non_exhaustive]
 pub struct Arm;
@@ -38,12 +36,12 @@ impl Arm {
         .await;
     }
 
-    pub fn try_stab(&mut self) -> Result<(), Error> {
+    pub fn try_stab(&mut self) -> Result<(), NotReady> {
         if self.is_ready() {
             arm_stab();
             Ok(())
         } else {
-            Err(Error::NotReady)
+            Err(NotReady)
         }
     }
     pub async fn stab(&mut self) {
@@ -51,12 +49,12 @@ impl Arm {
         arm_stab()
     }
 
-    pub fn try_pick(&mut self) -> Result<(), Error> {
+    pub fn try_pick(&mut self) -> Result<(), NotReady> {
         if self.is_ready() {
             arm_pick();
             Ok(())
         } else {
-            Err(Error::NotReady)
+            Err(NotReady)
         }
     }
     pub async fn pick(&mut self) {
@@ -65,12 +63,12 @@ impl Arm {
     }
 
     // TODO
-    pub fn try_drop(&mut self, idx: u8) -> Result<(), Error> {
+    pub fn try_drop(&mut self, idx: u8) -> Result<(), NotReady> {
         if self.is_ready() {
             arm_drop(idx);
             Ok(())
         } else {
-            Err(Error::NotReady)
+            Err(NotReady)
         }
     }
     pub async fn drop(&mut self, idx: u8) {

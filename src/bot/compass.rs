@@ -2,9 +2,9 @@ use core::{future::poll_fn, task::Poll};
 
 use kartoffel::compass_dir;
 
-use crate::{Direction, Error};
+use crate::Direction;
 
-use super::Singleton;
+use super::{error::NotReady, Singleton};
 
 #[non_exhaustive]
 pub struct Compass;
@@ -28,10 +28,10 @@ impl Compass {
         })
         .await
     }
-    pub fn try_direction(&mut self) -> Result<Direction, Error> {
+    pub fn try_direction(&mut self) -> Result<Direction, NotReady> {
         let result = compass_dir();
         match result {
-            0 => Err(Error::NotReady),
+            0 => Err(NotReady),
             1 => Ok(Direction::North),
             2 => Ok(Direction::East),
             3 => Ok(Direction::South),

@@ -1,10 +1,8 @@
 use kartoffel::{is_motor_ready, motor_step, motor_turn_left, motor_turn_right};
 
-use crate::Error;
-
 use core::{future::poll_fn, task::Poll};
 
-use super::Singleton;
+use super::{error::NotReady, Singleton};
 
 #[non_exhaustive]
 pub struct Motor;
@@ -30,12 +28,12 @@ impl Motor {
         .await;
     }
 
-    pub fn try_step(&mut self) -> Result<(), Error> {
+    pub fn try_step(&mut self) -> Result<(), NotReady> {
         if self.is_ready() {
             motor_step();
             Ok(())
         } else {
-            Err(Error::NotReady)
+            Err(NotReady)
         }
     }
     pub async fn step(&mut self) {
@@ -43,12 +41,12 @@ impl Motor {
         motor_step();
     }
 
-    pub fn try_turn_left(&mut self) -> Result<(), Error> {
+    pub fn try_turn_left(&mut self) -> Result<(), NotReady> {
         if self.is_ready() {
             motor_turn_left();
             Ok(())
         } else {
-            Err(Error::NotReady)
+            Err(NotReady)
         }
     }
     pub async fn turn_left(&mut self) {
@@ -56,12 +54,12 @@ impl Motor {
         motor_turn_left();
     }
 
-    pub fn try_turn_right(&mut self) -> Result<(), Error> {
+    pub fn try_turn_right(&mut self) -> Result<(), NotReady> {
         if self.is_ready() {
             motor_turn_right();
             Ok(())
         } else {
-            Err(Error::NotReady)
+            Err(NotReady)
         }
     }
     pub async fn turn_right(&mut self) {

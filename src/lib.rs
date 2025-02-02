@@ -23,15 +23,6 @@ pub use self::clock::{Cooldown, CooldownType, Duration, Instant, Timer};
 pub use self::world::{Coords, Direction, Distance, Global, Local, Position, Rotation, Tile};
 pub use kartoffel::{print, println, serial_buffer, serial_clear, serial_flush, serial_write};
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub enum Error {
-    NotReady,
-    Blocked,
-    OutOfMemory,
-    Inconsistent,
-    NoTargetError,
-}
-
 #[inline(always)]
 pub fn random_seed() -> u32 {
     timer_seed()

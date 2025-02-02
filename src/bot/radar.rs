@@ -1,7 +1,7 @@
 use critical_section::Mutex;
 use kartoffel::{is_radar_ready, radar_read, radar_scan};
 
-use crate::{Distance, Error, Local, Tile};
+use crate::{Distance, Local, Tile};
 use core::{
     cell::Cell,
     future::poll_fn,
@@ -11,7 +11,7 @@ use core::{
     task::{Poll, Waker},
 };
 
-use super::Singleton;
+use super::{error::RadarError, Singleton};
 
 #[non_exhaustive]
 pub struct Radar;
@@ -40,12 +40,9 @@ impl Radar {
         })
         .await;
     }
-    pub fn try_scan<Size: RadarSize>(&mut self) -> Result<RadarScan<Size>, Error> {
-        let res = Guard::try_execute_scan::<Size>();
-        match res {
-            Ok(()) => Ok(Guard::create_active::<Size>()),
-            Err(err) => Err(err),
-        }
+    pub fn try_scan<Size: RadarSize>(&mut self) -> Result<RadarScan<Size>, RadarError> {
+        Guard::try_execute_scan::<Size>()?;
+        Ok(Guard::create_active::<Size>())
     }
     pub async fn scan<Size: RadarSize>(&mut self) -> RadarScan<Size> {
         self.wait().await;
@@ -122,7 +119,7 @@ impl Guard {
             }
         })
     }
-    fn try_execute_scan<Size: RadarSize>() -> Result<(), Error> {
+    fn try_execute_scan<Size: RadarSize>() -> Result<(), RadarError> {
         Self::with_critical_section(|guard| {
             if guard.n_scans == 0 {
                 if is_radar_ready() {
@@ -132,10 +129,10 @@ impl Guard {
                     guard.active_uuid = guard.active_uuid.wrapping_add(1);
                     Ok(())
                 } else {
-                    Err(Error::NotReady)
+                    Err(RadarError::NotReady)
                 }
             } else {
-                Err(Error::Blocked)
+                Err(RadarError::AccessBlocked)
             }
         })
     }
@@ -320,7 +317,7 @@ mod tests {
 
         radar.wait_blocking();
         println!("new scan blocked?");
-        assert_err!(radar.try_scan::<D3>(), Error::Blocked);
+        assert_err!(radar.try_scan::<D3>(), RadarError::AccessBlocked);
 
         drop(scan);
         radar.wait_blocking();

@@ -46,10 +46,10 @@ Possible improvements:
 
 # Tests
 
-Using unstable `custom_test_frameworks`, build command e.g. (linux and wayland)
+The unstable `custom_test_frameworks` is used for test. The build command is e.g. (linux and wayland)
 ```bash
 cargo build --release --tests --all
-base64 target/riscv64-kartoffel-bot/release/deps/async_kartoffel-e58abfc84af62516 | wl-copy`
+base64 target/riscv64-kartoffel-bot/release/deps/async_kartoffel-e58abfc84af62516 | wl-copy
 ```
 Hash (`e58a...`) may need to be adapted.
 

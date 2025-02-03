@@ -24,11 +24,11 @@ impl Coords for Local {}
 pub trait Coords: Sealed + Clone + Copy + Eq + PartialEq + Ord + PartialOrd + 'static {}
 
 #[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
-pub struct Distance<C: Coords> {
+pub struct Vec2<C: Coords> {
     data: [i16; 2],
     phantom: PhantomData<C>,
 }
-impl<C: Coords> Default for Distance<C> {
+impl<C: Coords> Default for Vec2<C> {
     fn default() -> Self {
         Self {
             data: Default::default(),
@@ -37,21 +37,21 @@ impl<C: Coords> Default for Distance<C> {
     }
 }
 
-impl core::fmt::Debug for Distance<Global> {
+impl core::fmt::Debug for Vec2<Global> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(f, "(East: {}, North: {})", self.data[0], self.data[1])
     }
 }
 
-impl core::fmt::Debug for Distance<Local> {
+impl core::fmt::Debug for Vec2<Local> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(f, "(Right: {}, Front: {})", self.data[0], self.data[1])
     }
 }
 
-impl Distance<Global> {
-    pub const fn local(self, direction: Direction) -> Distance<Local> {
-        Distance::<Local> {
+impl Vec2<Global> {
+    pub const fn local(self, direction: Direction) -> Vec2<Local> {
+        Vec2::<Local> {
             data: match direction {
                 Direction::North => [self.data[0], self.data[1]],
                 Direction::South => [-self.data[0], -self.data[1]],
@@ -61,17 +61,17 @@ impl Distance<Global> {
             phantom: PhantomData,
         }
     }
-    pub const fn new_east(dist: i16) -> Self {
-        Self::new_global(dist, 0)
+    pub const fn new_east(distance: i16) -> Self {
+        Self::new_global(distance, 0)
     }
-    pub const fn new_west(dist: i16) -> Self {
-        Self::new_global(-dist, 0)
+    pub const fn new_west(distance: i16) -> Self {
+        Self::new_global(-distance, 0)
     }
-    pub const fn new_north(dist: i16) -> Self {
-        Self::new_global(0, dist)
+    pub const fn new_north(distance: i16) -> Self {
+        Self::new_global(0, distance)
     }
-    pub const fn new_south(dist: i16) -> Self {
-        Self::new_global(0, -dist)
+    pub const fn new_south(distance: i16) -> Self {
+        Self::new_global(0, -distance)
     }
     pub const fn new_global(east: i16, north: i16) -> Self {
         Self {
@@ -92,7 +92,7 @@ impl Distance<Global> {
         -self.data[1]
     }
     pub const fn from_direction(direction: Direction, distance: i16) -> Self {
-        Distance::<Local>::new_front(distance).global(direction)
+        Vec2::<Local>::new_front(distance).global(direction)
     }
     pub const fn get(&self, direction: Direction) -> i16 {
         match direction {
@@ -103,7 +103,7 @@ impl Distance<Global> {
         }
     }
 }
-impl Distance<Local> {
+impl Vec2<Local> {
     pub const fn new_local(right: i16, front: i16) -> Self {
         Self {
             data: [right, front],
@@ -123,7 +123,7 @@ impl Distance<Local> {
         Self::new_local(-distance, 0)
     }
     pub const fn from_rotation(rotation: Rotation, distance: i16) -> Self {
-        Distance::<Local> {
+        Vec2::<Local> {
             data: match rotation {
                 Rotation::Id => [0, distance],
                 Rotation::Left => [-distance, 0],
@@ -133,8 +133,8 @@ impl Distance<Local> {
             phantom: PhantomData,
         }
     }
-    pub const fn global(self, direction: Direction) -> Distance<Global> {
-        Distance::<Global> {
+    pub const fn global(self, direction: Direction) -> Vec2<Global> {
+        Vec2::<Global> {
             data: match direction {
                 Direction::North => [self.data[0], self.data[1]],
                 Direction::South => [-self.data[0], -self.data[1]],
@@ -158,7 +158,7 @@ impl Distance<Local> {
     }
 }
 
-impl<C: Coords> Distance<C> {
+impl<C: Coords> Vec2<C> {
     pub const fn new_generic(i1: i16, i2: i16) -> Self {
         Self {
             data: [i1, i2],
@@ -181,7 +181,7 @@ impl<C: Coords> Distance<C> {
     }
 }
 
-impl<C: Coords> Sub for Distance<C> {
+impl<C: Coords> Sub for Vec2<C> {
     type Output = Self;
     fn sub(self, rhs: Self) -> Self::Output {
         Self {
@@ -191,7 +191,7 @@ impl<C: Coords> Sub for Distance<C> {
     }
 }
 
-impl<C: Coords> Add for Distance<C> {
+impl<C: Coords> Add for Vec2<C> {
     type Output = Self;
     fn add(self, rhs: Self) -> Self::Output {
         Self {
@@ -201,7 +201,7 @@ impl<C: Coords> Add for Distance<C> {
     }
 }
 
-impl<C: Coords> Neg for Distance<C> {
+impl<C: Coords> Neg for Vec2<C> {
     type Output = Self;
     fn neg(self) -> Self::Output {
         Self {
@@ -211,7 +211,7 @@ impl<C: Coords> Neg for Distance<C> {
     }
 }
 
-impl<C: Coords> Mul<i16> for Distance<C> {
+impl<C: Coords> Mul<i16> for Vec2<C> {
     type Output = Self;
 
     fn mul(self, rhs: i16) -> Self::Output {

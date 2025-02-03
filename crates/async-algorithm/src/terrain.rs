@@ -1,6 +1,6 @@
 use heapless::Vec;
 
-use crate::{Direction, Distance, Global, Position, RadarScan, RadarSize, Rotation};
+use async_kartoffel::{Direction, Global, Position, RadarScan, RadarSize, Rotation, Vec2};
 
 use super::{
     chunk_map::{Chunk, ChunkIndex, ChunkLocation, ChunkMap},
@@ -113,7 +113,7 @@ impl ChunkTerrain {
     fn update_from_radar<Size: RadarSize>(
         &mut self,
         radar: &RadarScan<Size>,
-        center: Distance<Global>,
+        center: Vec2<Global>,
         direction: Direction,
     ) -> Result<Self, MapInconsistent> {
         let r: i16 = Size::R as i16;
@@ -121,10 +121,10 @@ impl ChunkTerrain {
         let mut map_changed = false;
         for east in (center.east() - r).clamp(0, 7)..=(center.east() + r).clamp(0, 7) {
             for north in (center.north() - r).clamp(0, 7)..=(center.north() + r).clamp(0, 7) {
-                let dist_from_center = Distance::new_global(east, north) - center;
+                let vec_from_center = Vec2::new_global(east, north) - center;
                 // unwrap okay, because we ensured it is in radar range
                 let walkable = radar
-                    .at(dist_from_center.local(direction))
+                    .at(vec_from_center.local(direction))
                     .unwrap()
                     .is_walkable_terrain();
                 let in_chunk_index = ChunkIndex::new(east as u8, north as u8);
@@ -152,11 +152,11 @@ impl<const N: usize> ChunkMap<N, Terrain, ChunkTerrain> {
         pos: Position,
         direction: Direction,
     ) -> Result<(), MapError> {
-        let dist = Distance::new_global(Size::R as i16, Size::R as i16);
+        let vec = Vec2::new_global(Size::R as i16, Size::R as i16);
         // unique chunks, since maximum scan size is 9 the scan is guaranteed to fit into 4 chunks
         let locations: Vec<ChunkLocation, 4> = Rotation::all()
             .into_iter()
-            .map(|rot| Self::to_chunk_pos(pos + dist.rotate(rot)).0)
+            .map(|rot| Self::to_chunk_pos(pos + vec.rotate(rot)).0)
             .collect();
 
         let mut results = Vec::<ChunkTerrain, 4>::new();

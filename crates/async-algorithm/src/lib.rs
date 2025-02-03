@@ -1,3 +1,16 @@
+#![no_std]
+#![no_main]
+#![cfg_attr(feature = "test-kartoffel", feature(custom_test_frameworks))]
+#![cfg_attr(feature = "test-kartoffel", reexport_test_harness_main = "test_main")]
+#![cfg_attr(feature = "test-kartoffel", test_runner(test_kartoffel::runner))]
+
+#[cfg(all(test, feature = "test-kartoffel"))]
+#[no_mangle]
+fn main() {
+    test_main();
+    loop {}
+}
+
 mod breakpoint;
 mod chunk_map;
 mod error;
@@ -19,13 +32,13 @@ pub use exploration::Exploration;
 pub use exploration::State as ExplorationState;
 pub use map::Map;
 pub use math::isqrt;
-pub use measure::dist_walk_with_rotation;
-pub use measure::DistBotStab;
-pub use measure::DistBotWalk;
-pub use measure::DistManhattan;
-pub use measure::DistMax;
-pub use measure::DistMin;
+pub use measure::distance_walk_with_rotation;
+pub use measure::DistanceBotStab;
+pub use measure::DistanceBotWalk;
+pub use measure::DistanceManhattan;
+pub use measure::DistanceMax;
 pub use measure::DistanceMeasure;
+pub use measure::DistanceMin;
 pub use navigation::Navigation;
 pub use navigation::State as NavigationState;
 pub use stats::StatsDog;

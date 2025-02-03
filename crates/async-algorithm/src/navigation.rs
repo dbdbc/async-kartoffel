@@ -1,9 +1,13 @@
 use core::num::NonZeroU16;
 
-use crate::{algorithm::error::NoTarget, Direction, Position};
+use async_kartoffel::{Direction, Position};
 use heapless::{FnvIndexMap, Vec};
 
-use super::{breakpoint::Breakpoint, error::OutOfMemory, DistManhattan, DistanceMeasure, Map};
+use super::{
+    breakpoint::Breakpoint,
+    error::{NoTarget, OutOfMemory},
+    DistanceManhattan, DistanceMeasure, Map,
+};
 
 // possibly implemented as bitfield
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Default)]
@@ -99,9 +103,9 @@ impl<const N: usize> Progress<N> {
         };
         let new_cost = |old_cost: u16, pos: Position| {
             let dist = old_cost
-                .checked_sub(DistManhattan::measure(pos - old_start))
+                .checked_sub(DistanceManhattan::measure(pos - old_start))
                 .unwrap();
-            dist + DistManhattan::measure(pos - new_start)
+            dist + DistanceManhattan::measure(pos - new_start)
         };
 
         // update all costs, push everything into active_next, so active_current is empty
@@ -133,7 +137,7 @@ impl<const N: usize> Progress<N> {
                     // unwrap: must be positive due to definition
                     let distance_current = self
                         .cost_current
-                        .checked_sub(DistManhattan::measure(pos - self.task.from))
+                        .checked_sub(DistanceManhattan::measure(pos - self.task.from))
                         .unwrap();
                     for (neighbor, _) in pos.neighbors() {
                         let distance_neighbor = distance_current + 1;
@@ -142,14 +146,16 @@ impl<const N: usize> Progress<N> {
                             return Ok(NavigationResult::Success);
                         }
                         let dist_neighbor_prev = distances_get(distances, neighbor);
-                        if can_go(neighbor) {
-                            if dist_neighbor_prev
+                        if can_go(neighbor)
+                            && dist_neighbor_prev
                                 .is_none_or(|dist_prev| dist_prev > distance_neighbor)
-                            {
-                                distances_set(distances, neighbor, distance_neighbor)?;
-                                let cost_neighbor = distance_neighbor
-                                    + DistManhattan::measure(neighbor - self.task.from);
-                                if cost_neighbor == self.cost_current {
+                        {
+                            distances_set(distances, neighbor, distance_neighbor)?;
+                            let cost_neighbor = distance_neighbor
+                                + DistanceManhattan::measure(neighbor - self.task.from);
+                            match cost_neighbor.cmp(&self.cost_current) {
+                                core::cmp::Ordering::Less => unreachable!(),
+                                core::cmp::Ordering::Equal => {
                                     self.active_current
                                         .push(neighbor)
                                         .map_err(|_| OutOfMemory)?;
@@ -158,12 +164,11 @@ impl<const N: usize> Progress<N> {
                                     // not possible, because we require an improvement to cost
                                     // (distance_neighbor < dist_prev)
                                     self.active_next.remove(&neighbor);
-                                } else if cost_neighbor > self.cost_current {
+                                }
+                                core::cmp::Ordering::Greater => {
                                     self.active_next
                                         .insert(neighbor, cost_neighbor)
                                         .map_err(|_| OutOfMemory)?;
-                                } else {
-                                    assert!(false);
                                 }
                             }
                         }
@@ -314,7 +319,7 @@ impl<T: Map<Option<NonZeroU16>>, const N: usize> Navigation<T, N> {
         self.state = State::Running(Progress {
             active_current: Default::default(),
             active_next: Default::default(),
-            cost_current: DistManhattan::measure(from - to),
+            cost_current: DistanceManhattan::measure(from - to),
             task: NavigationTask { from, to },
         });
         let State::Running(ref mut progress) = self.state else {

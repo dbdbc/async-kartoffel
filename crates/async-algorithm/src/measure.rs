@@ -1,41 +1,41 @@
-use crate::{Coords, Direction, Distance, Global, Rotation};
+use async_kartoffel::{Coords, Direction, Global, Rotation, Vec2};
 
 pub trait DistanceMeasure: Clone + 'static {
-    fn measure<C: Coords>(dist: Distance<C>) -> u16;
+    fn measure<C: Coords>(vec: Vec2<C>) -> u16;
 }
 
 #[derive(Clone)]
-pub enum DistMax {}
-impl DistanceMeasure for DistMax {
-    fn measure<C: Coords>(dist: Distance<C>) -> u16 {
-        let (d0, d1) = dist.to_generic();
+pub enum DistanceMax {}
+impl DistanceMeasure for DistanceMax {
+    fn measure<C: Coords>(vec: Vec2<C>) -> u16 {
+        let (d0, d1) = vec.to_generic();
         let (d0, d1) = (d0.unsigned_abs(), d1.unsigned_abs());
         d0.max(d1)
     }
 }
 #[derive(Clone)]
-pub enum DistMin {}
-impl DistanceMeasure for DistMin {
-    fn measure<C: Coords>(dist: Distance<C>) -> u16 {
-        let (d0, d1) = dist.to_generic();
+pub enum DistanceMin {}
+impl DistanceMeasure for DistanceMin {
+    fn measure<C: Coords>(vec: Vec2<C>) -> u16 {
+        let (d0, d1) = vec.to_generic();
         let (d0, d1) = (d0.unsigned_abs(), d1.unsigned_abs());
         d0.min(d1)
     }
 }
 #[derive(Clone)]
-pub enum DistManhattan {}
-impl DistanceMeasure for DistManhattan {
-    fn measure<C: Coords>(dist: Distance<C>) -> u16 {
-        let (d0, d1) = dist.to_generic();
+pub enum DistanceManhattan {}
+impl DistanceMeasure for DistanceManhattan {
+    fn measure<C: Coords>(vec: Vec2<C>) -> u16 {
+        let (d0, d1) = vec.to_generic();
         let (d0, d1) = (d0.unsigned_abs(), d1.unsigned_abs());
         d0 + d1
     }
 }
 #[derive(Clone)]
-pub enum DistBotWalk {}
-impl DistanceMeasure for DistBotWalk {
-    fn measure<C: Coords>(dist: Distance<C>) -> u16 {
-        let (d0, d1) = dist.to_generic();
+pub enum DistanceBotWalk {}
+impl DistanceMeasure for DistanceBotWalk {
+    fn measure<C: Coords>(vec: Vec2<C>) -> u16 {
+        let (d0, d1) = vec.to_generic();
         let (d0, d1) = (d0.unsigned_abs(), d1.unsigned_abs());
         let (max, min) = if d0 >= d1 { (d0, d1) } else { (d1, d0) };
         if min == 0 {
@@ -46,10 +46,10 @@ impl DistanceMeasure for DistBotWalk {
     }
 }
 #[derive(Clone)]
-pub enum DistBotStab {}
-impl DistanceMeasure for DistBotStab {
-    fn measure<C: Coords>(dist: Distance<C>) -> u16 {
-        let (d0, d1) = dist.to_generic();
+pub enum DistanceBotStab {}
+impl DistanceMeasure for DistanceBotStab {
+    fn measure<C: Coords>(vec: Vec2<C>) -> u16 {
+        let (d0, d1) = vec.to_generic();
         let (d0, d1) = (d0.unsigned_abs(), d1.unsigned_abs());
         let (max, min) = if d0 >= d1 { (d0, d1) } else { (d1, d0) };
         if min == 0 {
@@ -60,11 +60,12 @@ impl DistanceMeasure for DistBotStab {
     }
 }
 
-pub fn dist_walk_with_rotation(dist: Distance<Global>, facing: Direction) -> u16 {
+/// how many 10k clock cycles does a bot looking at facing require to walk to vec
+pub fn distance_walk_with_rotation(vec: Vec2<Global>, facing: Direction) -> u16 {
     // additional initial rotations not covered by DistBotWalk
     let n_rotations = match (
-        dist.get(facing),
-        dist.get(facing + Rotation::Left).unsigned_abs(),
+        vec.get(facing),
+        vec.get(facing + Rotation::Left).unsigned_abs(),
     ) {
         (..0, 0) => 2,
         (..0, 1..) => 1,
@@ -73,5 +74,5 @@ pub fn dist_walk_with_rotation(dist: Distance<Global>, facing: Direction) -> u16
         (1.., _) => 0,
     };
 
-    n_rotations + DistBotWalk::measure(dist)
+    n_rotations + DistanceBotWalk::measure(vec)
 }

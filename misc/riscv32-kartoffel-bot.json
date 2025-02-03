@@ -1,0 +1,26 @@
+{
+  "arch": "riscv32",
+  "code-model": "small",
+  "cpu": "generic-rv32",
+  "crt-objects-fallback": "false",
+  "data-layout": "e-m:e-p:32:32-i64:64-n32-S128",
+  "eh-frame-header": false,
+  "emit-debug-gdb-scripts": false,
+  "features": "+a,+m",
+  "linker": "rust-lld",
+  "linker-flavor": "gnu-lld",
+  "llvm-abiname": "ilp32",
+  "llvm-target": "riscv32",
+  "max-atomic-width": 32,
+  "metadata": {
+    "description": null,
+    "host_tools": null,
+    "std": null,
+    "tier": null
+  },
+  "panic-strategy": "abort",
+  "relocation-model": "static",
+  "singlethread": true,
+  "supported-sanitizers": [],
+  "target-pointer-width": "32"
+}

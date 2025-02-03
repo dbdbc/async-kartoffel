@@ -1,0 +1,19 @@
+[package]
+name = "async-kartoffel"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+test-kartoffel = {path = "../../crates/test-kartoffel", optional = true}
+kartoffel.workspace = true
+critical-section.workspace = true
+heapless.workspace = true
+
+[features]
+default = ["critical-section-impl", "serial-panic", "test-kartoffel"]
+
+# Provides an implementation for the critical-section crate
+critical-section-impl = []
+
+# Enables printing of the panic message to the serial port
+serial-panic = ["kartoffel/serial-panic"]

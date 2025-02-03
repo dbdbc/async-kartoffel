@@ -1,0 +1,7 @@
+[package]
+name = "test-kartoffel"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+kartoffel.workspace = true

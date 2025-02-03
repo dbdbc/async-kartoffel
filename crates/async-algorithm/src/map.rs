@@ -1,4 +1,4 @@
-use crate::Position;
+use async_kartoffel::Position;
 
 pub trait Map<T> {
     fn set(&mut self, pos: Position, t: T) -> Result<(), T>;

@@ -2,7 +2,9 @@ use core::{convert::identity, fmt::Display, marker::PhantomData};
 
 use heapless::{FnvIndexSet, Vec};
 
-use crate::{algorithm::breakpoint::Breakpoint, Distance, Position, RadarScan, RadarSize};
+use async_kartoffel::{Position, RadarScan, RadarSize, Vec2};
+
+use crate::Breakpoint;
 
 use super::{
     error::{MapError, MapInconsistent, OutOfMemory},
@@ -205,7 +207,7 @@ impl<const N: usize, T: Map<Terrain>> Exploration<N, T> {
             State::Running(progress) => {
                 for i_east in Size::range() {
                     for i_north in Size::range() {
-                        let pos = center + Distance::new_global(i_east.into(), i_north.into());
+                        let pos = center + Vec2::new_global(i_east.into(), i_north.into());
                         if progress.stale.remove(&pos) {
                             progress.active.push(pos).map_err(|_| OutOfMemory)?;
                         }
@@ -215,7 +217,7 @@ impl<const N: usize, T: Map<Terrain>> Exploration<N, T> {
             State::Halted(progress) => {
                 for i_east in Size::range() {
                     for i_north in Size::range() {
-                        let pos = center + Distance::new_global(i_east.into(), i_north.into());
+                        let pos = center + Vec2::new_global(i_east.into(), i_north.into());
                         if progress.stale.remove(&pos) {
                             progress.active.push(pos).map_err(|_| OutOfMemory)?;
                         }

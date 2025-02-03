@@ -1,6 +1,6 @@
 use core::{marker::PhantomData, ops::Add};
 
-use crate::{Distance, Global, Position};
+use async_kartoffel::{Global, Position, Vec2};
 use heapless::FnvIndexMap;
 
 use super::{error::OutOfMemory, map::Map};
@@ -24,9 +24,9 @@ impl ChunkIndex {
     pub fn index64(self) -> u8 {
         self.index
     }
-    fn to_dist(self) -> Distance<Global> {
+    fn to_vec(self) -> Vec2<Global> {
         let (east_in_chunk, north_in_chunk) = self.to_indices();
-        Distance::new_global(east_in_chunk as i16, north_in_chunk as i16)
+        Vec2::new_global(east_in_chunk as i16, north_in_chunk as i16)
     }
     fn increase_by_one(self) -> Option<Self> {
         assert!(self.index < 64);
@@ -46,7 +46,7 @@ impl Add<ChunkLocation> for ChunkIndex {
     type Output = Position;
 
     fn add(self, rhs: ChunkLocation) -> Self::Output {
-        rhs.south_west_pos() + self.to_dist()
+        rhs.south_west_pos() + self.to_vec()
     }
 }
 
@@ -96,11 +96,11 @@ pub struct ChunkLocation {
 impl ChunkLocation {
     /// this is the 0, 0 (west-south) corner of the chunk
     pub fn south_west_pos(&self) -> Position {
-        Position::from_from_origin(Distance::new_global(8 * self.east8, 8 * self.north8))
+        Position::from_from_origin(Vec2::new_global(8 * self.east8, 8 * self.north8))
     }
-    /// minimum distance to pos
-    pub fn min_dist_to(&self, pos: Position) -> Distance<Global> {
-        let dist_anchor = pos - self.south_west_pos();
+    /// minimum distance vec to pos
+    pub fn min_dist_to(&self, pos: Position) -> Vec2<Global> {
+        let vec_anchor = pos - self.south_west_pos();
         fn dist_relaxed(dist_anchor: i16) -> i16 {
             match dist_anchor {
                 ..0 => dist_anchor,
@@ -109,9 +109,9 @@ impl ChunkLocation {
             }
         }
 
-        Distance::new_global(
-            dist_relaxed(dist_anchor.east()),
-            dist_relaxed(dist_anchor.north()),
+        Vec2::new_global(
+            dist_relaxed(vec_anchor.east()),
+            dist_relaxed(vec_anchor.north()),
         )
     }
 }
@@ -132,15 +132,15 @@ impl<const N: usize, T, C: Chunk<T>> ChunkMap<N, T, C> {
         Default::default()
     }
     pub fn to_chunk_pos(pos: Position) -> (ChunkLocation, ChunkIndex) {
-        let dist = pos - Position::default();
+        let vec = pos - Position::default();
         (
             ChunkLocation {
-                east8: dist.east().div_euclid(8),
-                north8: dist.north().div_euclid(8),
+                east8: vec.east().div_euclid(8),
+                north8: vec.north().div_euclid(8),
             },
             ChunkIndex::new(
-                dist.east().rem_euclid(8) as u8,
-                dist.north().rem_euclid(8) as u8,
+                vec.east().rem_euclid(8) as u8,
+                vec.north().rem_euclid(8) as u8,
             ),
         )
     }

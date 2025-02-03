@@ -1,14 +1,16 @@
 #![no_main]
 #![no_std]
+#![feature(custom_test_frameworks)]
+#![test_runner(test_kartoffel::runner)]
 
 use alloc::boxed::Box;
+use async_algorithm::{
+    distance_walk_with_rotation, Breakpoint, ChunkMap, ChunkTerrain, DistanceBotWalk,
+    DistanceManhattan, DistanceMeasure, Exploration, Map, Navigation, StatsDog, Terrain,
+};
 use async_kartoffel::{
-    algorithm::{
-        dist_walk_with_rotation, Breakpoint, ChunkMap, ChunkTerrain, DistBotWalk, DistManhattan,
-        DistanceMeasure, Exploration, Map, Navigation, StatsDog, Terrain,
-    },
-    print, println, Arm, Bot, Direction, Distance, Duration, Instant, Local, Motor, Position,
-    Radar, RadarScan, RadarScanWeak, RadarSize, Rotation, Tile, Timer, D9,
+    print, println, Arm, Bot, Direction, Duration, Instant, Local, Motor, Position, Radar,
+    RadarScan, RadarScanWeak, RadarSize, Rotation, Tile, Timer, Vec2, D9,
 };
 use core::num::NonZeroU16;
 use core::ops::DerefMut;
@@ -48,12 +50,12 @@ fn main() {
 /// translation is applied before rotation, so still in original coordinates
 #[derive(Default)]
 struct Transform {
-    translation: Distance<Local>,
+    translation: Vec2<Local>,
     rotation: Rotation,
 }
 
 impl Transform {
-    fn transform(&self, vec: Distance<Local>) -> Distance<Local> {
+    fn transform(&self, vec: Vec2<Local>) -> Vec2<Local> {
         (vec + self.translation).rotate(self.rotation)
     }
     fn transform_rot(&self, rot: Rotation) -> Rotation {
@@ -63,7 +65,7 @@ impl Transform {
     fn from_motor_action(motor: Option<MotorAction>) -> Self {
         match motor {
             Some(MotorAction::Step) => Self {
-                translation: Distance::new_front(1),
+                translation: Vec2::new_front(1),
                 rotation: Default::default(),
             },
             Some(MotorAction::TurnLeft) => Self {
@@ -135,7 +137,7 @@ fn instincts<D: RadarSize>(
     let max_stab_wait = Duration::from_ticks(10_000);
     if arm.is_ready() {
         // overwrite next movement with urgent one
-        if radar_scan.at(Distance::new_front(1)).unwrap() == Tile::Flag {
+        if radar_scan.at(Vec2::new_front(1)).unwrap() == Tile::Flag {
             MotorArmAction {
                 motor: None,
                 arm: Some(ArmAction::Pick),
@@ -175,7 +177,7 @@ async fn execute_with_arm_timeout(
             match motor_action {
                 MotorAction::TurnLeft => *direction += Rotation::Left,
                 MotorAction::TurnRight => *direction += Rotation::Right,
-                MotorAction::Step => *position += Distance::new_front(1).global(*direction),
+                MotorAction::Step => *position += Vec2::new_front(1).global(*direction),
             }
         }
     }
@@ -218,7 +220,7 @@ fn movement(
                 let eval = navigation_target.as_ref().map_or(0, |&target| {
                     let pos_next = pos + next_location.global(direction);
                     let ori_next = direction + next_rotation;
-                    dist_walk_with_rotation(target - pos_next, ori_next)
+                    distance_walk_with_rotation(target - pos_next, ori_next)
                 });
                 Some((movement, eval))
             } else {
@@ -305,13 +307,13 @@ fn get_next<const N: usize, T: Map<Option<NonZeroU16>>>(
 ) -> Position {
     let valid_next = nav.next_step(pos);
     if valid_next.east {
-        pos + Distance::new_east(1)
+        pos + Vec2::new_east(1)
     } else if valid_next.west {
-        pos + Distance::new_west(1)
+        pos + Vec2::new_west(1)
     } else if valid_next.north {
-        pos + Distance::new_north(1)
+        pos + Vec2::new_north(1)
     } else if valid_next.south {
-        pos + Distance::new_south(1)
+        pos + Vec2::new_south(1)
     } else {
         pos
     }
@@ -326,7 +328,7 @@ fn print_map<T: Map<Terrain>, const N: usize>(
     let dist = dist as i16;
     for south in -dist..dist {
         for east in -dist..dist {
-            let pos_print = pos + Distance::new_global(east, -south);
+            let pos_print = pos + Vec2::new_global(east, -south);
             let ch = match markers.get(&pos_print) {
                 Some(&ch) => ch,
                 None => match map.get(pos_print) {
@@ -389,8 +391,8 @@ async fn map(
                 .into_iter()
                 .filter(|&flag_pos| !radar_scan.contains((flag_pos - pos).local(direction)))
                 .collect();
-            for dist in radar_scan.iter_tile(Tile::Flag) {
-                let flag_pos = pos + dist.global(direction);
+            for vec in radar_scan.iter_tile(Tile::Flag) {
+                let flag_pos = pos + vec.global(direction);
                 flags.push(flag_pos).expect("more than 4 flags found");
             }
         }
@@ -435,12 +437,12 @@ impl Computations {
         // flags are priority targets
         if self.target.is_none_or(|target| !flags.contains(&target)) {
             if let Some(&target_flag) = flags
-                .into_iter()
+                .iter()
                 .filter(|&&flag_pos| {
                     map.get(flag_pos)
                         .is_some_and(|terrain| terrain == Terrain::Reachable)
                 })
-                .min_by_key(|&&flag_pos| DistManhattan::measure(flag_pos - pos))
+                .min_by_key(|&&flag_pos| DistanceManhattan::measure(flag_pos - pos))
             {
                 self.target = Some(target_flag);
                 self.nav.initialize(pos, target_flag);
@@ -456,7 +458,7 @@ impl Computations {
         if self.target.is_none() {
             if let Some(unknown_reachables) = self.exploration.border(map) {
                 self.target = unknown_reachables
-                    .min_by_key(|&pos_border| DistBotWalk::measure(pos_border - pos));
+                    .min_by_key(|&pos_border| DistanceBotWalk::measure(pos_border - pos));
                 if let Some(target) = self.target {
                     self.nav.initialize(pos, target);
                 }

@@ -1,7 +1,7 @@
 use critical_section::Mutex;
 use kartoffel::{is_radar_ready, radar_read, radar_scan};
 
-use crate::{Distance, Local, Tile};
+use crate::{Local, Tile, Vec2};
 use core::{
     cell::Cell,
     future::poll_fn,
@@ -123,7 +123,7 @@ impl Guard {
         Self::with_critical_section(|guard| {
             if guard.n_scans == 0 {
                 if is_radar_ready() {
-                    radar_scan(Size::diameter() as usize);
+                    radar_scan(Size::diameter().into());
 
                     // can fail after u32::MAX iterations
                     guard.active_uuid = guard.active_uuid.wrapping_add(1);
@@ -198,24 +198,24 @@ pub struct RadarScan<Size: RadarSize>(PhantomData<Size>);
 
 impl<Size: RadarSize> RadarScan<Size> {
     #[inline(always)]
-    fn radar_indices(dist: Distance<Local>) -> Option<(i8, i8)> {
-        let (dx, dy) = (dist.right(), dist.back());
+    fn radar_indices(vec: Vec2<Local>) -> Option<(i8, i8)> {
+        let (dx, dy) = (vec.right(), vec.back());
         (dx.unsigned_abs() <= Size::R.into() && dy.unsigned_abs() <= Size::R.into())
             .then_some((dx as i8, dy as i8))
     }
     #[inline(always)]
-    fn to_distance(dx: i8, dy: i8) -> Distance<Local> {
-        Distance::new_local(dx.into(), (-dy).into())
+    fn to_vec(dx: i8, dy: i8) -> Vec2<Local> {
+        Vec2::new_local(dx.into(), (-dy).into())
     }
 
-    pub fn contains(&self, dist: Distance<Local>) -> bool {
-        Self::radar_indices(dist).is_some()
+    pub fn contains(&self, vec: Vec2<Local>) -> bool {
+        Self::radar_indices(vec).is_some()
     }
 
-    pub fn at(&self, dist: Distance<Local>) -> Option<Tile> {
-        if let Some((dx, dy)) = Self::radar_indices(dist) {
+    pub fn at(&self, vec: Vec2<Local>) -> Option<Tile> {
+        if let Some((dx, dy)) = Self::radar_indices(vec) {
             // unwrap: unknown tile means error
-            Some(Tile::from_char(self.at_unchecked(dx, dy)).unwrap())
+            Some(Tile::from_char(self.at_unchecked(dx, dy)).expect("encountered unknown tile"))
         } else {
             None
         }
@@ -227,8 +227,8 @@ impl<Size: RadarSize> RadarScan<Size> {
     }
 
     #[inline(always)]
-    pub fn bot_at(&self, dist: Distance<Local>) -> Option<NonZeroU64> {
-        if let Some((dx, dy)) = Self::radar_indices(dist) {
+    pub fn bot_at(&self, vec: Vec2<Local>) -> Option<NonZeroU64> {
+        if let Some((dx, dy)) = Self::radar_indices(vec) {
             let d1 = radar_read(Size::diameter().into(), dx, dy, 1) as u64;
             let d2 = radar_read(Size::diameter().into(), dx, dy, 2) as u64;
             NonZeroU64::new((d1 << 32) | d2)
@@ -238,24 +238,24 @@ impl<Size: RadarSize> RadarScan<Size> {
     }
 
     /// Scanned tiles matching tile excluding (0, 0), this is e.g. useful to find only enemy bots
-    pub fn iter_tile(&self, tile: Tile) -> impl Iterator<Item = Distance<Local>> + use<'_, Size> {
+    pub fn iter_tile(&self, tile: Tile) -> impl Iterator<Item = Vec2<Local>> + use<'_, Size> {
         Size::range().flat_map(move |dx| {
             Size::range()
                 .filter(move |dy| {
                     self.at_unchecked(dx, *dy) == tile.to_char() && !(dx == 0 && *dy == 0)
                 })
-                .map(move |dy| Self::to_distance(dx, dy))
+                .map(move |dy| Self::to_vec(dx, dy))
         })
     }
 
     /// iterate over scanned tiles excluding (0, 0)
-    pub fn iter(&self) -> impl Iterator<Item = (Distance<Local>, Tile)> + use<'_, Size> {
+    pub fn iter(&self) -> impl Iterator<Item = (Vec2<Local>, Tile)> + use<'_, Size> {
         Size::range().flat_map(move |dx| {
             Size::range()
                 .filter(move |dy| !(dx == 0 && *dy == 0))
                 .map(move |dy| {
                     (
-                        Self::to_distance(dx, dy),
+                        Self::to_vec(dx, dy),
                         Tile::from_char(self.at_unchecked(dx, dy)).unwrap(),
                     )
                 })
@@ -303,7 +303,7 @@ mod tests {
     use kartoffel::println;
 
     use super::*;
-    use crate::tests::{
+    use test_kartoffel::{
         assert, assert_eq, assert_err, assert_none, option_unwrap, result_unwrap, TestError,
     };
 

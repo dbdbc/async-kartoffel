@@ -2,7 +2,7 @@ use core::{fmt::Display, future::Future};
 
 use embassy_futures::select::{select, Either};
 
-use crate::{Duration, Instant};
+use async_kartoffel::{Duration, Instant};
 
 use super::{isqrt, Breakpoint};
 
@@ -13,6 +13,11 @@ pub struct StatsDog {
     min_duration: Duration,
     sum_sq_duration: u64,
     last_time: Instant,
+}
+impl Default for StatsDog {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 impl StatsDog {
     pub fn new() -> Self {

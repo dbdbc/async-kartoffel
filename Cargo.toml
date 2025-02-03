@@ -1,25 +1,22 @@
-[package]
-name = "async-kartoffel"
-version = "0.1.0"
+[workspace]
+
+resolver = "2"
+members = [
+	"crates/async-kartoffel",
+	"crates/async-algorithm",
+	"crates/test-kartoffel",
+]
+
+[workspace.package]
 edition = "2021"
+version = "0.1.0"
 
-[features]
-default = ["serial-panic", "critical-section-impl"]
-
-# Enables printing of the panic message to the serial port
-serial-panic = []
-# Provides an implementation for the critical-section crate
-critical-section-impl = []
-
-[dependencies]
-kartoffel = { git = "https://github.com/Patryk27/kartoffels" }
+[workspace.dependencies]
+# TODO update revision once riscv32 has been deployed
+kartoffel = { git = "https://github.com/Patryk27/kartoffels", rev = "520ef1a100022f82a4f6c103ab81ed05528722dd", default-features = false }
 critical-section = "1.2.0"
-spin = "0.9.8"
-talc = "4.4.2"
 heapless = "0.8.0"
 embassy-futures = "0.1.1"
-
-[dev-dependencies]
 embassy-executor = { version = "0.6.3", features = ["arch-spin", "executor-thread"] }
 static_cell = "2.1.0"
 embassy-sync = "0.6.2"
@@ -28,3 +25,23 @@ embassy-sync = "0.6.2"
 codegen-units = 1
 lto = "fat"
 opt-level = 3
+
+[package]
+name = "example-kartoffels"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+heapless.workspace = true
+embassy-futures.workspace = true
+async-kartoffel = {path = "crates/async-kartoffel", default-features = true}
+async-algorithm = {path = "crates/async-algorithm"}
+test-kartoffel = {path = "crates/test-kartoffel"}
+embassy-executor.workspace = true
+static_cell.workspace = true
+embassy-sync.workspace = true
+
+[[bin]]
+name = "tutorial-stab"
+test = false
+bench = false

@@ -6,6 +6,7 @@ mod map;
 mod math;
 mod measure;
 mod navigation;
+mod stats;
 mod terrain;
 
 pub use breakpoint::Breakpoint;
@@ -27,5 +28,6 @@ pub use measure::DistMin;
 pub use measure::DistanceMeasure;
 pub use navigation::Navigation;
 pub use navigation::State as NavigationState;
+pub use stats::StatsDog;
 pub use terrain::ChunkTerrain;
 pub use terrain::Terrain;

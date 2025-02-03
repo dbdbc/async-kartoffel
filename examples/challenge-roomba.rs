@@ -4,8 +4,8 @@
 use alloc::boxed::Box;
 use async_kartoffel::{
     algorithm::{
-        dist_walk_with_rotation, isqrt, Breakpoint, ChunkMap, ChunkTerrain, DistBotWalk,
-        DistManhattan, DistanceMeasure, Exploration, Map, Navigation, Terrain,
+        dist_walk_with_rotation, Breakpoint, ChunkMap, ChunkTerrain, DistBotWalk, DistManhattan,
+        DistanceMeasure, Exploration, Map, Navigation, StatsDog, Terrain,
     },
     print, println, Arm, Bot, Direction, Distance, Duration, Instant, Local, Motor, Position,
     Radar, RadarScan, RadarScanWeak, RadarSize, Rotation, Tile, Timer, D9,
@@ -245,41 +245,15 @@ fn movement(
 
 #[task]
 async fn watchdog(signal_complete: &'static Signal<NoopRawMutex, ()>) -> ! {
-    let mut sum_duration = Duration::default();
-    let mut counter = 0;
-    let mut max_duration = Duration::default();
-    let mut min_duration = Duration::default();
-    let mut sum_sq_duration = 0u64;
-
-    let mut last_time = Instant::now();
+    let mut dog = StatsDog::new();
     loop {
+        dog.restart_timer();
         Breakpoint::new().await;
-        let now = Instant::now();
-        let duration = (now - last_time).unwrap();
-
-        sum_duration += duration;
-        counter += 1;
-        max_duration = max_duration.max(duration);
-        min_duration = min_duration.min(duration);
-        sum_sq_duration += u64::from(duration.as_ticks()).pow(2);
+        dog.feed();
 
         if signal_complete.try_take().is_some() {
-            println!("watchdog blocked");
-            println!("n   : {}", counter);
-            println!("min : {}", min_duration.as_ticks());
-            println!("mean: {}", sum_duration.as_ticks() / counter);
-            println!("max : {}", max_duration.as_ticks());
-            // std = 1/(N-1) * sum((x - µ)^2)
-            //     = 1/(N-1) * (sum(x^2) - 2 sum(x) µ + N µ^2)
-            //     = (sum(x^2) - N µ^2) / (N-1)
-            let std = isqrt(
-                (sum_sq_duration - u64::from(sum_duration.as_ticks()).pow(2) / u64::from(counter))
-                    / (u64::from(counter) - 1),
-            );
-            println!("std : {}", std);
+            println!("{}", dog);
         }
-
-        last_time = Instant::now();
     }
 }
 

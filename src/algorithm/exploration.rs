@@ -109,7 +109,7 @@ fn set_reachable(
     reachable: bool,
 ) -> Result<(), MapError> {
     match map.get(pos) {
-        Some(Terrain::Unknown) => panic!(),
+        Some(Terrain::Unknown) => Err(MapInconsistent.into()),
         Some(Terrain::Blocked) => {
             if reachable {
                 Err(MapInconsistent.into())
@@ -122,11 +122,10 @@ fn set_reachable(
                 map.set(pos, Terrain::Reachable).map_err(|_| OutOfMemory)?;
                 Ok(())
             } else {
-                // TODO represent unreachable but walkable?
                 Err(MapInconsistent.into())
             }
         }
-        None => panic!(),
+        None => Err(MapInconsistent.into()),
     }
 }
 
@@ -183,8 +182,6 @@ impl<const N: usize, T: Map<Terrain>> Exploration<N, T> {
                 if progress.stale.is_empty() {
                     self.state = State::Completed;
                 } else {
-                    // TODO remove
-                    // println!("halting, stale: {}", progress.stale.iter().count());
                     self.state.halt();
                 }
             }

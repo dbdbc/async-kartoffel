@@ -9,11 +9,10 @@ members = [
 
 [workspace.package]
 edition = "2021"
-version = "0.1.0"
+version = "0.7.0"
 
 [workspace.dependencies]
-# TODO update revision once riscv32 has been deployed
-kartoffel = { git = "https://github.com/Patryk27/kartoffels", rev = "520ef1a100022f82a4f6c103ab81ed05528722dd", default-features = false }
+kartoffel = { git = "https://github.com/Patryk27/kartoffels", default-features = false }
 critical-section = "1.2.0"
 heapless = "0.8.0"
 embassy-futures = "0.1.1"

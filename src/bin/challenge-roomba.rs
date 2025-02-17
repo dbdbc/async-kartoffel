@@ -110,7 +110,7 @@ impl MotorAction {
     ];
     async fn execute(&self, motor: &mut Motor) {
         match self {
-            MotorAction::Step => motor.step().await,
+            MotorAction::Step => motor.step_fw().await,
             MotorAction::TurnRight => motor.turn_right().await,
             MotorAction::TurnLeft => motor.turn_left().await,
         }

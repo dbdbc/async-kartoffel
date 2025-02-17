@@ -8,11 +8,13 @@ Patryk27](https://github.com/Patryk27/kartoffels/)
 See binaries in `src` directory. To build and copy to clipboard, use e.g. (linux and wayland)
 ```bash
 cargo build --release --bins
-base64 target/riscv64-kartoffel-bot/release/tutorial-stab | wl-copy`
+base64 target/riscv32-kartoffel-bot/release/tutorial-stab | wl-copy`
 ```
 For other systems, check the build script in the [default starter pack](https://github.com/Patryk27/kartoffel/).
 
 # Work in progress 🚧
+
+- the `async-algorithm` crate is possibly incorrect, slow, and may change at any moment
 
 Possible improvements:
 - tests for binaries
@@ -49,7 +51,7 @@ Possible improvements:
 The unstable `custom_test_frameworks` is used for test. The build command is e.g. (linux and wayland)
 ```bash
 cargo build --release --tests --all
-base64 target/riscv64-kartoffel-bot/release/deps/async_kartoffel-e58abfc84af62516 | wl-copy
+base64 target/riscv32-kartoffel-bot/release/deps/async_kartoffel-e58abfc84af62516 | wl-copy
 ```
 Hash (`e58a...`) may need to be adapted.
 

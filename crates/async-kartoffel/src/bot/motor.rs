@@ -1,4 +1,4 @@
-use kartoffel::{is_motor_ready, motor_step, motor_turn_left, motor_turn_right};
+use kartoffel::{is_motor_ready, motor_step_bw, motor_step_fw, motor_turn_left, motor_turn_right};
 
 use core::{future::poll_fn, task::Poll};
 
@@ -28,17 +28,30 @@ impl Motor {
         .await;
     }
 
-    pub fn try_step(&mut self) -> Result<(), NotReady> {
+    pub fn try_step_fw(&mut self) -> Result<(), NotReady> {
         if self.is_ready() {
-            motor_step();
+            motor_step_fw();
             Ok(())
         } else {
             Err(NotReady)
         }
     }
-    pub async fn step(&mut self) {
+    pub async fn step_fw(&mut self) {
         self.wait().await;
-        motor_step();
+        motor_step_fw();
+    }
+
+    pub fn try_step_bw(&mut self) -> Result<(), NotReady> {
+        if self.is_ready() {
+            motor_step_bw();
+            Ok(())
+        } else {
+            Err(NotReady)
+        }
+    }
+    pub async fn step_bw(&mut self) {
+        self.wait().await;
+        motor_step_bw();
     }
 
     pub fn try_turn_left(&mut self) -> Result<(), NotReady> {

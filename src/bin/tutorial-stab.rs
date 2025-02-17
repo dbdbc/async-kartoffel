@@ -33,7 +33,7 @@ async fn main_task(mut bot: Bot) -> ! {
             bot.motor.turn_left().await;
             bot.arm.stab().await;
         } else {
-            bot.motor.step().await;
+            bot.motor.step_fw().await;
         }
     }
 }

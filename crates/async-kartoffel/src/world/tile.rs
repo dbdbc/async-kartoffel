@@ -5,6 +5,7 @@ pub enum Tile {
     Void,
     WallHorizontal,
     WallVertical,
+    WallCave,
     EntryExit,
     Diamond,
     Flag,
@@ -21,6 +22,7 @@ impl Tile {
             '+' => Some(Self::EntryExit),
             '*' => Some(Self::Diamond),
             '=' => Some(Self::Flag),
+            '#' => Some(Self::WallCave),
             _ => None,
         }
     }
@@ -31,6 +33,7 @@ impl Tile {
             Self::Void => ' ',
             Self::WallVertical => '|',
             Self::WallHorizontal => '-',
+            Self::WallCave => '#',
             Self::EntryExit => '+',
             Self::Diamond => '*',
             Self::Flag => '=',

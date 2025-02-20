@@ -204,7 +204,7 @@ impl<Size: RadarSize> RadarScan<Size> {
             .then_some((dx as i8, dy as i8))
     }
     #[inline(always)]
-    fn to_vec(dx: i8, dy: i8) -> Vec2<Local> {
+    pub fn to_vec(dx: i8, dy: i8) -> Vec2<Local> {
         Vec2::new_local(dx.into(), (-dy).into())
     }
 

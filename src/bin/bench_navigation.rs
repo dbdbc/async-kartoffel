@@ -6,7 +6,7 @@
 use alloc::{boxed::Box, string::ToString};
 use async_kartoffel::{print, println, Duration, Position, Timer, Vec2};
 
-use async_algorithm::{ChunkMap, ChunkTerrain, Map, Navigation, StatsDog, Terrain};
+use async_algorithm::{ChunkMapHash, ChunkTerrain, Map, Navigation, StatsDog, Terrain};
 use core::ops::Deref;
 use core::{num::NonZeroU16, ops::RangeInclusive};
 use embassy_executor::{task, Executor};
@@ -51,8 +51,8 @@ fn print_map(
     }
 }
 
-type MyMap = ChunkMap<128, Terrain, ChunkTerrain>;
-type MyNav = Navigation<ChunkMap<64, Option<NonZeroU16>, [[Option<NonZeroU16>; 8]; 8]>, 128>;
+type MyMap = ChunkMapHash<128, Terrain, ChunkTerrain>;
+type MyNav = Navigation<ChunkMapHash<64, Option<NonZeroU16>, [[Option<NonZeroU16>; 8]; 8]>, 128>;
 
 struct MapDef<T: Map<Terrain>> {
     map: Box<T>,

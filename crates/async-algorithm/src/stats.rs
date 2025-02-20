@@ -66,6 +66,12 @@ impl StatsDog {
     pub fn mean(&self) -> u32 {
         self.sum_duration.as_ticks() / self.counter
     }
+    pub fn count(&self) -> u32 {
+        self.counter
+    }
+    pub fn total(&self) -> Duration {
+        self.sum_duration
+    }
     pub fn std(&self) -> u32 {
         // std = 1 / (N - 1) * sum((x - µ)^2)
         //     = 1 / (N - 1) * (sum(x^2) - 2 sum(x) µ + N µ^2)

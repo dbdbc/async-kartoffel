@@ -23,10 +23,10 @@ mod stats;
 mod terrain;
 
 pub use breakpoint::Breakpoint;
+pub use chunk_map::hash::ChunkMapHash;
 pub use chunk_map::ChunkBool;
 pub use chunk_map::ChunkIndex;
 pub use chunk_map::ChunkLocation;
-pub use chunk_map::ChunkMap;
 pub use chunk_map::IterInChunk;
 pub use exploration::Exploration;
 pub use exploration::State as ExplorationState;
@@ -42,5 +42,6 @@ pub use measure::DistanceMin;
 pub use navigation::Navigation;
 pub use navigation::State as NavigationState;
 pub use stats::StatsDog;
+pub use terrain::update_chunk_map;
 pub use terrain::ChunkTerrain;
 pub use terrain::Terrain;

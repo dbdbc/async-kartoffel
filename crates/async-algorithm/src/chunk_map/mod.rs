@@ -1,9 +1,11 @@
-use core::{marker::PhantomData, ops::Add};
+use core::ops::Add;
 
 use async_kartoffel::{Global, Position, Vec2};
-use heapless::FnvIndexMap;
 
-use super::{error::OutOfMemory, map::Map};
+use crate::error::OutOfMemory;
+
+pub mod hash;
+pub mod rolling;
 
 /// Location in chunk, between (0, 0)..=(7, 7)
 #[derive(Clone, PartialEq, Eq, Ord, PartialOrd, Hash, Debug, Copy)]
@@ -116,73 +118,25 @@ impl ChunkLocation {
     }
 }
 
+pub fn to_chunk_pos(pos: Position) -> (ChunkLocation, ChunkIndex) {
+    let vec = pos - Position::default();
+    (
+        ChunkLocation {
+            east8: vec.east().div_euclid(8),
+            north8: vec.north().div_euclid(8),
+        },
+        ChunkIndex::new(
+            vec.east().rem_euclid(8) as u8,
+            vec.north().rem_euclid(8) as u8,
+        ),
+    )
+}
+
 pub trait Chunk<T> {
     fn new() -> Self;
     fn get(&self, index: ChunkIndex) -> T;
     fn set(&mut self, index: ChunkIndex, t: T);
 }
-
-/// A map implementation based on 8 by 8 Chunks, stored in a hashmap.
-pub struct ChunkMap<const N: usize, T, C: Chunk<T>> {
-    data: FnvIndexMap<ChunkLocation, C, N>,
-    _phantom: PhantomData<T>,
-}
-impl<const N: usize, T, C: Chunk<T>> ChunkMap<N, T, C> {
-    pub fn new() -> Self {
-        Default::default()
-    }
-    pub fn to_chunk_pos(pos: Position) -> (ChunkLocation, ChunkIndex) {
-        let vec = pos - Position::default();
-        (
-            ChunkLocation {
-                east8: vec.east().div_euclid(8),
-                north8: vec.north().div_euclid(8),
-            },
-            ChunkIndex::new(
-                vec.east().rem_euclid(8) as u8,
-                vec.north().rem_euclid(8) as u8,
-            ),
-        )
-    }
-    /// Return a mutable reference to the chunk at the given index. If it does not exist yet, it
-    /// will be created first.
-    pub fn get_mut_chunk_or_new(&mut self, index: ChunkLocation) -> Result<&mut C, OutOfMemory> {
-        if !self.data.contains_key(&index) {
-            self.data.insert(index, C::new()).map_err(|_| OutOfMemory)?;
-        }
-        // unwrap: we just made sure it exists
-        Ok(self.data.get_mut(&index).unwrap())
-    }
-}
-impl<const N: usize, T, C: Chunk<T>> Default for ChunkMap<N, T, C> {
-    fn default() -> Self {
-        Self {
-            data: FnvIndexMap::new(),
-            _phantom: PhantomData,
-        }
-    }
-}
-impl<const N: usize, T, C: Chunk<T>> Map<T> for ChunkMap<N, T, C> {
-    fn set(&mut self, pos: Position, t: T) -> Result<(), T> {
-        let (div, rem) = Self::to_chunk_pos(pos);
-        match self.get_mut_chunk_or_new(div) {
-            Ok(chunk) => {
-                chunk.set(rem, t);
-                Ok(())
-            }
-            Err(_) => Err(t),
-        }
-    }
-    fn get(&self, pos: Position) -> Option<T> {
-        let (div, rem) = Self::to_chunk_pos(pos);
-        self.data.get(&div).map(|chunk| chunk.get(rem))
-    }
-    fn clear(&mut self) {
-        self.data.clear()
-    }
-}
-
-// Chunk impl
 
 /// Most basic [`Chunk`]
 impl<T: Clone + Default> Chunk<T> for [[T; 8]; 8] {
@@ -217,5 +171,27 @@ impl ChunkBool {
         } else {
             self.data &= !Self::bit(index);
         }
+    }
+}
+
+pub trait ChunkMap<T, C: Chunk<T>> {
+    /// Return a mutable reference to the chunk at the given index. If it does not exist yet, it
+    /// will be created first.
+    fn get_chunk_mut_or_new(&mut self, location: ChunkLocation) -> Result<&mut C, OutOfMemory>;
+    fn get_chunk(&self, location: ChunkLocation) -> Option<&C>;
+    fn clear(&mut self);
+    fn set_value(&mut self, pos: Position, t: T) -> Result<(), T> {
+        let (div, rem) = to_chunk_pos(pos);
+        match self.get_chunk_mut_or_new(div) {
+            Ok(chunk) => {
+                chunk.set(rem, t);
+                Ok(())
+            }
+            Err(_) => Err(t),
+        }
+    }
+    fn get_value(&self, pos: Position) -> Option<T> {
+        let (div, rem) = to_chunk_pos(pos);
+        self.get_chunk(div).map(|chunk| chunk.get(rem))
     }
 }

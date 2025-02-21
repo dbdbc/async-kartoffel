@@ -1,0 +1,11 @@
+[package]
+name = "kartoffel-gps-builder"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+kartoffel-gps = {path = "../../crates/kartoffel-gps"}
+anyhow = {workspace = true, default-features = true}
+phf.workspace = true
+phf_codegen.workspace = true
+phf_shared.workspace = true

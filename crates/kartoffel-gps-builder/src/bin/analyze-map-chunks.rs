@@ -1,25 +1,17 @@
 use std::{collections::HashMap, path::Path};
 
-use kartoffel_gps::{Chunk, Map};
+use kartoffel_gps::Chunk;
+use kartoffel_gps::MapSection;
+use kartoffel_gps_builder::Map;
 
 fn main() {
     const CHUNK_SIZE: usize = 9;
 
-    let map_dir = Path::new("./data/maps/grotta");
-    let map = Map::from_path(map_dir.join("map.txt")).unwrap();
+    let map_location = Path::new("./maps/map.txt");
+    let map = Map::from_path(map_location).unwrap();
     println!("walkable tiles: {}", map.n_walkable());
 
-    let mut chunks: HashMap<Chunk<CHUNK_SIZE>, Vec<(usize, usize)>> = HashMap::new();
-    let (range_south, range_east) = Chunk::<CHUNK_SIZE>::ranges(map.height, map.width);
-    for center_south in range_south.clone() {
-        for center_east in range_east.clone() {
-            let chunk = map.get_chunk(center_south, center_east).unwrap();
-            let center = (center_south, center_east);
-            if chunk.center() {
-                chunks.entry(chunk).or_default().push(center);
-            }
-        }
-    }
+    let chunks = map.get_chunks::<Chunk<CHUNK_SIZE>>();
 
     let mut multiplicities: HashMap<usize, Vec<Chunk<CHUNK_SIZE>>> = HashMap::new();
     for (chunk, locations) in &chunks {

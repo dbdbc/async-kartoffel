@@ -5,7 +5,10 @@ edition = "2021"
 
 [dependencies]
 kartoffel-gps = {path = "../../crates/kartoffel-gps"}
+async-kartoffel = {path = "../../crates/async-kartoffel", default-features = false}
 anyhow = {workspace = true, default-features = true}
-phf.workspace = true
-phf_codegen.workspace = true
-phf_shared.workspace = true
+ndarray = {workspace = true, default-features = true}
+ndarray-stats = {workspace = true, default-features = true}
+phf = {workspace = true, default-features = true}
+phf_codegen = {workspace = true, default-features = true}
+phf_shared = {workspace = true, default-features = true}

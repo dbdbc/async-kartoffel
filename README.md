@@ -62,3 +62,7 @@ Add the following lines
 #![test_runner(test_kartoffel::runner)]
 ```
 add the top of your library to enable tests. Might not work for binaries though.
+
+# Running native binaries
+
+```cargo run --release --package kartoffel-gps-builder --target x86_64-unknown-linux-gnu -Z build-std=core,std,alloc --bin analyze-map```

@@ -11,12 +11,12 @@ mod private {
     pub trait Sealed {}
 }
 
-#[derive(Clone, Copy, PartialEq, PartialOrd, Ord, Eq)]
+#[derive(Clone, Copy, PartialEq, PartialOrd, Ord, Eq, Hash)]
 pub enum Global {}
 impl Sealed for Global {}
 impl Coords for Global {}
 
-#[derive(Clone, Copy, PartialEq, PartialOrd, Ord, Eq)]
+#[derive(Clone, Copy, PartialEq, PartialOrd, Ord, Eq, Hash)]
 pub enum Local {}
 impl Sealed for Local {}
 impl Coords for Local {}

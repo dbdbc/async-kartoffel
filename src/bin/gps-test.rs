@@ -4,10 +4,10 @@
 #![test_runner(test_kartoffel::runner)]
 #![feature(iter_next_chunk)]
 
-use async_kartoffel::{println, Bot, RadarSize, Rotation, Vec2, D7};
+use async_kartoffel::{println, Bot, Instant, Rotation, Vec2, D9 as DRadar};
 use embassy_executor::{task, Executor};
 use example_kartoffels::{get_global_pos, global_pos_entries};
-use kartoffel_gps::Chunk;
+use kartoffel_gps::{Chunk, MapSection};
 use static_cell::StaticCell;
 
 #[no_mangle]
@@ -24,29 +24,21 @@ fn main() {
 async fn main_task(mut bot: Bot) -> ! {
     let mut facing = bot.compass.direction().await;
 
-    for chunk in global_pos_entries() {
-        println!("{}", chunk);
-    }
+    println!("n unique: {:?}", global_pos_entries().count());
 
     loop {
-        let scan = bot.radar.scan::<D7>().await;
+        let scan = bot.radar.scan::<DRadar>().await;
 
-        let mut chunk = Chunk::<7>::default();
-        for i_east in D7::range() {
-            for i_south in D7::range() {
-                let vec = Vec2::new_east(i_east.into()) + Vec2::new_south(i_south.into());
-                let vec_local = vec.local(facing);
-                let walkable = scan.at(vec_local).unwrap().is_walkable_terrain();
-                chunk.0[usize::try_from(i_south + 3).unwrap()]
-                    [usize::try_from(i_east + 3).unwrap()] = walkable;
-            }
-        }
+        let chunk = Chunk::from_scan(&scan, facing);
+        let t = Instant::now();
         let pos = get_global_pos(&chunk);
+        let dur = (Instant::now() - t).unwrap();
         if let Some((south, east)) = pos {
-            println!("global pos (east, south): ({}, {})", east, south);
+            println!("global pos: ({}, {})", east, south);
         } else {
             println!("global pos unknown");
         }
+        println!("{}", dur);
 
         if scan.at(Vec2::new_front(1)).unwrap().is_walkable_terrain() {
             bot.motor.step_fw().await;

@@ -20,7 +20,10 @@ pub use self::bot::{
 pub use self::clock::{Cooldown, CooldownType, Duration, Instant, Timer};
 pub use self::world::{Coords, Direction, Global, Local, Position, Rotation, Tile, Vec2};
 
-pub use kartoffel::{print, println, serial_buffer, serial_clear, serial_flush, serial_write};
+#[cfg(any(target_arch = "riscv32"))]
+pub use kartoffel::{print, println};
+
+pub use kartoffel::{serial_buffer, serial_clear, serial_flush, serial_write};
 
 #[inline(always)]
 pub fn random_seed() -> u32 {

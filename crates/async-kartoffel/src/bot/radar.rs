@@ -1,7 +1,7 @@
 use critical_section::Mutex;
 use kartoffel::{is_radar_ready, radar_read, radar_scan};
 
-use crate::{Local, Tile, Vec2};
+use crate::{Coords, Local, Tile, Vec2};
 use core::{
     cell::Cell,
     future::poll_fn,
@@ -123,7 +123,7 @@ impl Guard {
         Self::with_critical_section(|guard| {
             if guard.n_scans == 0 {
                 if is_radar_ready() {
-                    radar_scan(Size::diameter().into());
+                    radar_scan(Size::D.into());
 
                     // can fail after u32::MAX iterations
                     guard.active_uuid = guard.active_uuid.wrapping_add(1);
@@ -148,11 +148,16 @@ pub trait RadarSize:
     private::Sealed + Clone + Copy + PartialEq + Eq + PartialOrd + Ord + 'static
 {
     const R: u8;
-    fn diameter() -> u8 {
-        Self::R * 2 + 1
-    }
+    const D: u8;
     fn range() -> RangeInclusive<i8> {
         -(Self::R as i8)..=Self::R as i8
+    }
+    fn contains(vec: Vec2<impl Coords>) -> bool {
+        let (i1, i2) = vec.to_generic();
+        -(Self::R as i16) <= i1
+            && -(Self::R as i16) <= i2
+            && (Self::R as i16) >= i1
+            && (Self::R as i16) >= i2
     }
     fn to_str() -> &'static str;
 }
@@ -161,6 +166,7 @@ pub enum D3 {}
 impl private::Sealed for D3 {}
 impl RadarSize for D3 {
     const R: u8 = 1;
+    const D: u8 = 3;
     fn to_str() -> &'static str {
         "D3"
     }
@@ -170,6 +176,7 @@ pub enum D5 {}
 impl private::Sealed for D5 {}
 impl RadarSize for D5 {
     const R: u8 = 2;
+    const D: u8 = 5;
     fn to_str() -> &'static str {
         "D5"
     }
@@ -179,6 +186,7 @@ pub enum D7 {}
 impl private::Sealed for D7 {}
 impl RadarSize for D7 {
     const R: u8 = 3;
+    const D: u8 = 7;
     fn to_str() -> &'static str {
         "D7"
     }
@@ -188,6 +196,7 @@ pub enum D9 {}
 impl private::Sealed for D9 {}
 impl RadarSize for D9 {
     const R: u8 = 4;
+    const D: u8 = 9;
     fn to_str() -> &'static str {
         "D9"
     }
@@ -223,14 +232,14 @@ impl<Size: RadarSize> RadarScan<Size> {
 
     #[inline(always)]
     pub fn at_unchecked(&self, dx: i8, dy: i8) -> char {
-        radar_read(Size::diameter().into(), dx, dy, 0) as u8 as char
+        radar_read(Size::D.into(), dx, dy, 0) as u8 as char
     }
 
     #[inline(always)]
     pub fn bot_at(&self, vec: Vec2<Local>) -> Option<NonZeroU64> {
         if let Some((dx, dy)) = Self::radar_indices(vec) {
-            let d1 = radar_read(Size::diameter().into(), dx, dy, 1) as u64;
-            let d2 = radar_read(Size::diameter().into(), dx, dy, 2) as u64;
+            let d1 = radar_read(Size::D.into(), dx, dy, 1) as u64;
+            let d2 = radar_read(Size::D.into(), dx, dy, 2) as u64;
             NonZeroU64::new((d1 << 32) | d2)
         } else {
             None
@@ -346,11 +355,11 @@ mod tests {
         let mut radar = Radar;
 
         fn test_iter<Size: RadarSize>(radar: &mut Radar) -> Result<(), TestError> {
-            println!("{} scan", Size::diameter());
+            println!("{} scan", Size::D);
             radar.wait_blocking();
             let scan: RadarScan<Size> = result_unwrap!(radar.try_scan());
             println!("  iter");
-            let n_tiles = (Size::diameter() * Size::diameter() - 1) as usize;
+            let n_tiles = (Size::D * Size::D - 1) as usize;
             assert_eq!(scan.iter().count(), n_tiles);
             let mut tiles = [[false; 9]; 9];
             for (vec, _) in scan.iter() {

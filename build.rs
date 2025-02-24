@@ -3,27 +3,38 @@ use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::Path;
 
+use kartoffel_gps::Chunk;
+use kartoffel_gps::MapSection;
+
 fn main() {
+    add_gps::<Chunk<9>>();
+}
+
+fn add_gps<T: MapSection>() {
     let path = Path::new(&env::var("OUT_DIR").unwrap()).join("codegen.rs");
     let mut file = BufWriter::new(File::create(&path).unwrap());
 
-    println!("cargo::rerun-if-changed=maps/grotta/map.txt");
-    println!("cargo::rerun-if-changed=maps/sandbox-tiny/map.txt");
+    let map_path = "maps/map.txt";
 
-    let map =
-        kartoffel_gps_builder::Map::from_path(Path::new("./maps/sandbox-tiny/map.txt")).unwrap();
-    let unique_chunks = map.unique_chunks::<7>();
+    println!("cargo::rerun-if-changed={}", map_path);
+
+    let map = kartoffel_gps_builder::Map::from_path(Path::new(map_path)).unwrap();
+    let unique_chunks = map.unique_chunks::<T>();
 
     let mut builder = phf_codegen::Map::new();
-    for (key, value) in unique_chunks {
-        let center_south = u8::try_from(value.0).unwrap();
-        let center_east = u8::try_from(value.1).unwrap();
-        builder.entry(key, &std::format!("({}, {})", center_south, center_east));
+    for (chunk, center) in unique_chunks {
+        let center_south = u8::try_from(center.south()).expect("center should be south (left)");
+        let center_east = u8::try_from(center.east()).expect("center should be east (right)");
+        builder.entry(
+            chunk.compress().expect("center should be walkable"),
+            &std::format!("({}, {})", center_south, center_east),
+        );
     }
 
     write!(
         &mut file,
-        "static UNIQUE_CHUNKS: phf::Map<::kartoffel_gps::Chunk<7>, (u8, u8)> = {}",
+        "static UNIQUE_CHUNKS: phf::Map<{}, (u8, u8)> = {}",
+        <T>::compressed_type(),
         builder.build()
     )
     .unwrap();

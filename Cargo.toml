@@ -22,9 +22,11 @@ embassy-executor = { version = "0.6.3", features = ["arch-spin", "executor-threa
 static_cell = "2.1.0"
 embassy-sync = "0.6.2"
 phf = { version = "0.11.3", default-features = false }
-phf_codegen = "0.11.3"
+phf_codegen = {version = "0.11.3", default-features = false }
 phf_shared = {version = "0.11.3", default-features = false }
 anyhow = {version = "1.0.96", default-features = false}
+ndarray = {version = "0.16.1", default-features = false }
+ndarray-stats = {version = "0.6.0", default-features = false}
 
 [profile.release]
 codegen-units = 1
@@ -39,7 +41,7 @@ edition.workspace = true
 [dependencies]
 heapless.workspace = true
 embassy-futures.workspace = true
-async-kartoffel = {path = "crates/async-kartoffel", default-features = true}
+async-kartoffel = {path = "crates/async-kartoffel", features = ["critical-section-impl", "serial-panic", "test-kartoffel"] }
 async-algorithm = {path = "crates/async-algorithm"}
 test-kartoffel = {path = "crates/test-kartoffel"}
 kartoffel-gps = {path = "crates/kartoffel-gps"}
@@ -51,6 +53,7 @@ phf = {workspace = true, default-features = false}
 [build-dependencies]
 phf = { version = "0.11.3", default-features = false }
 phf_codegen = "0.11.3"
+kartoffel-gps = {path = "crates/kartoffel-gps"}
 kartoffel-gps-builder = {path = "crates/kartoffel-gps-builder"}
 
 [lib]

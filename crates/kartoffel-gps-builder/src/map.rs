@@ -2,7 +2,7 @@ use anyhow::anyhow;
 use async_kartoffel::Global;
 use async_kartoffel::Tile;
 use async_kartoffel::Vec2;
-use kartoffel_gps::MapSection;
+use kartoffel_gps::gps::MapSection;
 use std::{
     collections::HashMap,
     fs::File,
@@ -24,6 +24,22 @@ pub struct Map {
     pub height: usize,
 }
 
+pub struct PositionBiMap {
+    v: Vec<Vec2<Global>>,
+    h: HashMap<Vec2<Global>, usize>,
+}
+impl PositionBiMap {
+    pub fn vec(&self) -> &Vec<Vec2<Global>> {
+        &self.v
+    }
+    pub fn hashmap(&self) -> &HashMap<Vec2<Global>, usize> {
+        &self.h
+    }
+    pub fn len(&self) -> usize {
+        self.v.len()
+    }
+}
+
 impl Map {
     pub fn new_like(&self) -> Self {
         Self {
@@ -35,6 +51,28 @@ impl Map {
 
     pub fn n_walkable(&self) -> usize {
         self.tiles.iter().filter(|&&b| b).count()
+    }
+
+    pub fn walkable_positions(&self) -> PositionBiMap {
+        let mut positions_v: Vec<Vec2<Global>> = Default::default();
+        let mut positions_h: HashMap<Vec2<Global>, usize> = Default::default();
+        {
+            let mut index = 0usize;
+            for i_east in 0..self.width {
+                for i_south in 0..self.height {
+                    let pos = Vec2::new_east(i_east as i16) + Vec2::new_south(i_south as i16);
+                    if self.get(pos).is_some_and(|b| b) {
+                        positions_v.push(pos);
+                        positions_h.insert(pos, index);
+                        index += 1;
+                    }
+                }
+            }
+        }
+        PositionBiMap {
+            v: positions_v,
+            h: positions_h,
+        }
     }
 
     pub fn get(&self, vec: Vec2<Global>) -> Option<bool> {

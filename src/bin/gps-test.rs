@@ -4,10 +4,10 @@
 #![test_runner(test_kartoffel::runner)]
 #![feature(iter_next_chunk)]
 
-use async_kartoffel::{println, Bot, Instant, Rotation, Vec2, D9 as DRadar};
+use async_kartoffel::{println, Bot, Instant, Rotation, Vec2, D7 as DRadar};
 use embassy_executor::{task, Executor};
 use example_kartoffels::{get_global_pos, global_pos_entries};
-use kartoffel_gps::{Chunk, MapSection};
+use kartoffel_gps::gps::{Chunk, MapSection};
 use static_cell::StaticCell;
 
 #[no_mangle]

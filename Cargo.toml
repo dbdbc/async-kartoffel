@@ -55,6 +55,8 @@ phf = { version = "0.11.3", default-features = false }
 phf_codegen = "0.11.3"
 kartoffel-gps = {path = "crates/kartoffel-gps"}
 kartoffel-gps-builder = {path = "crates/kartoffel-gps-builder"}
+ndarray = {version = "0.16.1", default-features = false }
+ndarray-stats = {version = "0.6.0", default-features = false}
 
 [lib]
 test = false

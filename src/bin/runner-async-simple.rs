@@ -311,15 +311,6 @@ fn bot_eval_func(dir: Vec2<Local>, stab: bool, back_against_wall: bool) -> (u8, 
     }
 }
 
-fn wall_eval_func<D: RadarSize>(radar_scan: &RadarScan<D>, after_scan: &Transform) -> u8 {
-    let front = after_scan.chain_vec(Vec2::new_front(1));
-    match radar_scan.at(front.vec) {
-        Some(tile) if tile.is_walkable_terrain() => 0,
-        Some(_) => 2,
-        None => 1,
-    }
-}
-
 fn movement(
     _pos: Position,
     _direction: Direction,

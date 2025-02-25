@@ -205,11 +205,13 @@ type MyMap = ChunkMapHash<128, Terrain, ChunkTerrain>;
 type MyNav = Navigation<ChunkMapHash<64, Option<NonZeroU16>, [[Option<NonZeroU16>; 8]; 8]>, 64>;
 type MyExp = Exploration<256, MyMap>;
 
+#[allow(unused)]
 struct DropTimer<'a> {
     init: Instant,
     name: &'a str,
 }
 impl<'a> DropTimer<'a> {
+    #[allow(unused)]
     fn new(name: &'a str) -> Self {
         Self {
             init: Instant::now(),

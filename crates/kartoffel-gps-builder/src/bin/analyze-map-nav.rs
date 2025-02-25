@@ -1,8 +1,9 @@
 use std::path::Path;
 
+use kartoffel_gps::const_graph::{ConstSparseGraph, ConstSparseGraphNode};
 use kartoffel_gps_builder::{
     beacon_nav::{build_distance_graph, build_trivial_navigation_graph, find_beacons, sub_graph},
-    const_graph::{ConstSparseGraph, ConstSparseGraphBuilder, ConstSparseGraphNode},
+    const_graph::ConstSparseGraphBuilder,
     const_vec2::ArrayBuilder,
     map::Map,
 };
@@ -52,18 +53,6 @@ fn main() {
         .map(|&index| positions.vec()[index])
         .collect::<Vec<_>>();
 
-    let builder_graph = ConstSparseGraphBuilder::from_matrix(&beacon_graph);
-    let builder_pos = ArrayBuilder(&beacon_positions);
-    println!(
-        "const BEACON_GRAPH: {} = {};",
-        builder_graph.type_string(),
-        builder_graph
-    );
-    println!(
-        "const BEACON_POSITIONS: {} = {};",
-        builder_pos.type_string(),
-        builder_pos
-    );
     let beacon_graph_sym = &beacon_graph * &beacon_graph.t();
 
     {
@@ -81,20 +70,35 @@ fn main() {
         }
     }
 
-    let mut a_pow = beacon_graph.clone();
-    for i in 2..20 {
-        a_pow = a_pow.dot(&beacon_graph);
+    {
+        let mut a_pow = beacon_graph.clone();
+        for i in 2..20 {
+            a_pow = a_pow.dot(&beacon_graph);
 
-        println!(
-            "min combinations after {} steps: {}",
-            i,
-            a_pow.min().unwrap()
-        );
+            println!(
+                "min combinations after {} steps: {}",
+                i,
+                a_pow.min().unwrap()
+            );
 
-        a_pow = a_pow.mapv(|x| if x == 0 { 0 } else { 1 });
+            a_pow = a_pow.mapv(|x| if x == 0 { 0 } else { 1 });
+        }
     }
 
     println!("done");
+
+    let builder_graph = ConstSparseGraphBuilder::from_matrix(&beacon_graph);
+    let builder_pos = ArrayBuilder(&beacon_positions);
+    println!(
+        "const BEACON_GRAPH: {} = {};",
+        builder_graph.type_string(),
+        builder_graph
+    );
+    println!(
+        "const BEACON_POSITIONS: {} = {};",
+        builder_pos.type_string(),
+        builder_pos
+    );
 
     for i in 0..BEACON_GRAPH.size() {
         println!(

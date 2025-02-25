@@ -33,6 +33,10 @@ codegen-units = 1
 lto = "fat"
 opt-level = 3
 
+[profile.release.build-override]
+# for faster graph analyzation
+opt-level = 3
+
 [package]
 name = "example-kartoffels"
 version.workspace = true

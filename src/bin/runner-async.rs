@@ -376,7 +376,7 @@ fn movement(
                 None
             }
         })
-        .min_by_key(|&(movement, _stab, bot_eval, long_eval, wall_eval)| {
+        .min_by_key(|&(movement, _stab, bot_eval, long_eval, _wall_eval)| {
             // this is the values that are minimized, in that order
             // TODO which order is best?
             (

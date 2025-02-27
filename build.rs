@@ -4,12 +4,13 @@ use std::io::{BufWriter, Write};
 use std::path::Path;
 
 use kartoffel_gps::gps::{Chunk, MapSection};
-use kartoffel_gps_builder::beacon_nav::{
-    build_distance_graph, build_trivial_navigation_graph, find_beacons, sub_graph,
+use kartoffel_gps_builder::{
+    beacon_nav::{build_distance_graph, build_trivial_navigation_graph, find_beacons, sub_graph},
+    const_graph::ConstSparseGraphBuilder,
+    const_vec2::ArrayBuilder,
+    map::Map,
 };
-use kartoffel_gps_builder::const_graph::ConstSparseGraphBuilder;
-use kartoffel_gps_builder::const_vec2::ArrayBuilder;
-use kartoffel_gps_builder::map::Map;
+use phf_codegen::Map as PhfMap;
 
 fn main() {
     let path = Path::new(&env::var("OUT_DIR").unwrap()).join("codegen.rs");
@@ -55,7 +56,7 @@ fn add_beacons(file: &mut BufWriter<impl Write>, map: &Map, max_beacon_dist: u32
 fn add_gps<T: MapSection>(file: &mut BufWriter<impl Write>, map: &Map) {
     let unique_chunks = map.unique_chunks::<T>();
 
-    let mut builder = phf_codegen::Map::new();
+    let mut builder = PhfMap::new();
     for (chunk, center) in unique_chunks {
         let center_south = u8::try_from(center.south()).expect("center should be south (left)");
         let center_east = u8::try_from(center.east()).expect("center should be east (right)");

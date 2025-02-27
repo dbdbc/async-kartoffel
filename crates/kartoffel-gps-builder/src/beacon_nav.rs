@@ -76,16 +76,6 @@ pub fn get_trivial_navigables(map: &Map, target: Vec2<Global>) -> Vec<Vec2<Globa
             }
         }
     }
-
-    // TODO
-    // start
-    //     .write_file(Path::new(&format!(
-    //         "./data/map_debug_{}_{}.txt",
-    //         target.east(),
-    //         target.south()
-    //     )))
-    //     .unwrap();
-
     ret
 }
 
@@ -138,18 +128,6 @@ pub fn find_beacons(
         * &trivial_navigation_graph.t()
         * distance_graph.mapv(|x| if x > max_beacon_dist { 0 } else { 1 });
 
-    // {
-    //     let to_pos = trivial_navigation_graph.dot(&Array1::ones(n));
-    //     let from_pos = Array1::ones(n).dot(trivial_navigation_graph);
-    //     let both_pos = symmetric_graph.dot(&Array1::ones(n));
-    //     for i in 0..n {
-    //         println!(
-    //             "pos: {:?}, from pos to {} others, from {} others to pos, {} both and dist restricted",
-    //             positions.vec()[i], from_pos[i], to_pos[i], both_pos[i],
-    //         );
-    //     }
-    // }
-
     // using symmetric graph to ensure traversability of beacon graph in all directions
     // using product of new reachable and connections to existing beacons to ensure
     // interconnectivity of beacon graph
@@ -174,14 +152,6 @@ pub fn find_beacons(
             panic!("Could not find interconnected beacon graph");
         }
         beacons.push(best_index);
-        // println!(
-        //     "best index {}: pos {:?} with value {} ({} * {})",
-        //     best_index,
-        //     positions.vec()[best_index],
-        //     value[best_index],
-        //     entry_exit[best_index],
-        //     beacon_reachable[best_index],
-        // );
 
         let mut best_one_hot = Array1::zeros(n);
         best_one_hot[best_index] = 1;

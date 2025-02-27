@@ -178,8 +178,6 @@ dependencies = [
  "heapless",
  "kartoffel-gps",
  "kartoffel-gps-builder",
- "ndarray",
- "ndarray-stats",
  "phf",
  "phf_codegen",
  "static_cell",

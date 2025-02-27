@@ -18,7 +18,9 @@ pub use self::bot::{
     Arm, Bot, Compass, Motor, Radar, RadarScan, RadarScanWeak, RadarSize, D3, D5, D7, D9,
 };
 pub use self::clock::{Cooldown, CooldownType, Duration, Instant, Timer};
-pub use self::world::{Coords, Direction, Global, Local, Position, Rotation, Tile, Vec2};
+pub use self::world::{
+    AnchorDefault, Coords, Direction, Global, Local, Position, PositionAnchor, Rotation, Tile, Vec2,
+};
 
 #[cfg(any(target_arch = "riscv32"))]
 pub use kartoffel::{print, println};

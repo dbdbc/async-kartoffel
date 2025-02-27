@@ -4,10 +4,11 @@ use std::io::{BufWriter, Write};
 use std::path::Path;
 
 use kartoffel_gps::gps::{Chunk, MapSection};
+use kartoffel_gps::GlobalPos;
 use kartoffel_gps_builder::{
     beacon_nav::{build_distance_graph, build_trivial_navigation_graph, find_beacons, sub_graph},
+    const_global_pos::ArrayBuilder,
     const_graph::ConstSparseGraphBuilder,
-    const_vec2::ArrayBuilder,
     map::Map,
 };
 use phf_codegen::Map as PhfMap;
@@ -58,8 +59,10 @@ fn add_gps<T: MapSection>(file: &mut BufWriter<impl Write>, map: &Map) {
 
     let mut builder = PhfMap::new();
     for (chunk, center) in unique_chunks {
-        let center_south = u8::try_from(center.south()).expect("center should be south (left)");
-        let center_east = u8::try_from(center.east()).expect("center should be east (right)");
+        let center_south = u8::try_from((center - GlobalPos::default()).south())
+            .expect("center should be south (left)");
+        let center_east = u8::try_from((center - GlobalPos::default()).east())
+            .expect("center should be east (right)");
         builder.entry(
             chunk.compress().expect("center should be walkable"),
             &std::format!("({}, {})", center_south, center_east),

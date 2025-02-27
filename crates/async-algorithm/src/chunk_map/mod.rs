@@ -98,7 +98,7 @@ pub struct ChunkLocation {
 impl ChunkLocation {
     /// this is the 0, 0 (west-south) corner of the chunk
     pub fn south_west_pos(&self) -> Position {
-        Position::from_from_origin(Vec2::new_global(8 * self.east8, 8 * self.north8))
+        Position::add_to_anchor(Vec2::new_global(8 * self.east8, 8 * self.north8))
     }
     /// minimum distance vec to pos
     pub fn min_dist_to(&self, pos: Position) -> Vec2<Global> {

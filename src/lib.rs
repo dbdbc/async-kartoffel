@@ -1,14 +1,21 @@
 #![no_std]
 
-use async_kartoffel::{Global, Vec2};
-use kartoffel_gps::gps::{Chunk, MapSection};
+use async_kartoffel::Vec2;
+use kartoffel_gps::{
+    gps::{Chunk, MapSection},
+    GlobalPos,
+};
 
 const CHUNK_SIZE: usize = 7;
 
 include!(concat!(env!("OUT_DIR"), "/codegen.rs"));
 
-pub fn get_global_pos(chunk: &Chunk<CHUNK_SIZE>) -> Option<(u8, u8)> {
-    UNIQUE_CHUNKS.get(chunk.compress()?.as_ref()).cloned()
+pub fn get_global_pos(chunk: &Chunk<CHUNK_SIZE>) -> Option<GlobalPos> {
+    let (east, south) = UNIQUE_CHUNKS.get(chunk.compress()?.as_ref()).cloned()?;
+    Some(GlobalPos::add_to_anchor(Vec2::new_global(
+        i16::from(east),
+        -i16::from(south),
+    )))
 }
 
 pub fn global_pos_entries(
@@ -16,7 +23,7 @@ pub fn global_pos_entries(
     UNIQUE_CHUNKS.keys()
 }
 
-pub fn beacons() -> &'static [Vec2<Global>] {
+pub fn beacons() -> &'static [GlobalPos] {
     &BEACON_POSITIONS
 }
 

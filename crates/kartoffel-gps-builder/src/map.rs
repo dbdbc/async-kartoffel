@@ -1,8 +1,9 @@
 use anyhow::anyhow;
-use async_kartoffel::Global;
 use async_kartoffel::Tile;
 use async_kartoffel::Vec2;
+use core::default::Default;
 use kartoffel_gps::gps::MapSection;
+use kartoffel_gps::GlobalPos;
 use std::{
     collections::HashMap,
     fs::File,
@@ -25,14 +26,14 @@ pub struct Map {
 }
 
 pub struct PositionBiMap {
-    v: Vec<Vec2<Global>>,
-    h: HashMap<Vec2<Global>, usize>,
+    v: Vec<GlobalPos>,
+    h: HashMap<GlobalPos, usize>,
 }
 impl PositionBiMap {
-    pub fn vec(&self) -> &Vec<Vec2<Global>> {
+    pub fn vec(&self) -> &Vec<GlobalPos> {
         &self.v
     }
-    pub fn hashmap(&self) -> &HashMap<Vec2<Global>, usize> {
+    pub fn hashmap(&self) -> &HashMap<GlobalPos, usize> {
         &self.h
     }
     pub fn len(&self) -> usize {
@@ -54,13 +55,15 @@ impl Map {
     }
 
     pub fn walkable_positions(&self) -> PositionBiMap {
-        let mut positions_v: Vec<Vec2<Global>> = Default::default();
-        let mut positions_h: HashMap<Vec2<Global>, usize> = Default::default();
+        let mut positions_v: Vec<GlobalPos> = Default::default();
+        let mut positions_h: HashMap<GlobalPos, usize> = Default::default();
         {
             let mut index = 0usize;
             for i_east in 0..self.width {
                 for i_south in 0..self.height {
-                    let pos = Vec2::new_east(i_east as i16) + Vec2::new_south(i_south as i16);
+                    let pos = GlobalPos::default()
+                        + Vec2::new_east(i_east as i16)
+                        + Vec2::new_south(i_south as i16);
                     if self.get(pos).is_some_and(|b| b) {
                         positions_v.push(pos);
                         positions_h.insert(pos, index);
@@ -75,7 +78,8 @@ impl Map {
         }
     }
 
-    pub fn get(&self, vec: Vec2<Global>) -> Option<bool> {
+    pub fn get(&self, pos: GlobalPos) -> Option<bool> {
+        let vec = pos - GlobalPos::default();
         let south = usize::try_from(vec.south()).ok()?;
         let east = usize::try_from(vec.east()).ok()?;
 
@@ -86,7 +90,8 @@ impl Map {
         }
     }
 
-    pub fn set(&mut self, vec: Vec2<Global>, val: bool) -> anyhow::Result<()> {
+    pub fn set(&mut self, pos: GlobalPos, val: bool) -> anyhow::Result<()> {
+        let vec = pos - GlobalPos::default();
         let south = usize::try_from(vec.south())?;
         let east = usize::try_from(vec.east())?;
 
@@ -99,11 +104,13 @@ impl Map {
     }
 
     /// get chunks where center is walkable
-    pub fn get_chunks<T: MapSection>(&self) -> HashMap<T, Vec<Vec2<Global>>> {
+    pub fn get_chunks<T: MapSection>(&self) -> HashMap<T, Vec<GlobalPos>> {
         let mut chunks: HashMap<_, Vec<_>> = HashMap::new();
         for center_south in 0..i16::try_from(self.height).unwrap() {
             for center_east in 0..i16::try_from(self.width).unwrap() {
-                let center = Vec2::new_global(center_east, -center_south);
+                let center = GlobalPos::default()
+                    + Vec2::new_east(center_east)
+                    + Vec2::new_south(center_south);
                 let chunk = self.get_chunk::<T>(center);
                 if chunk.at_center() {
                     chunks.entry(chunk).or_default().push(center);
@@ -113,7 +120,7 @@ impl Map {
         chunks
     }
 
-    pub fn unique_chunks<T: MapSection>(&self) -> Vec<(T, Vec2<Global>)> {
+    pub fn unique_chunks<T: MapSection>(&self) -> Vec<(T, GlobalPos)> {
         let chunks = self.get_chunks::<T>();
 
         let mut unique_chunks = Vec::new();
@@ -125,7 +132,7 @@ impl Map {
         unique_chunks
     }
 
-    pub fn get_chunk<T: MapSection>(&self, center: Vec2<Global>) -> T {
+    pub fn get_chunk<T: MapSection>(&self, center: GlobalPos) -> T {
         T::from_function(|vec| self.get(center + vec).is_some_and(|b| b))
     }
 

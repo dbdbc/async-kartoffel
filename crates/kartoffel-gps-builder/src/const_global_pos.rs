@@ -1,25 +1,23 @@
 use core::fmt::Display;
 
-use async_kartoffel::{Global, Vec2};
+use kartoffel_gps::GlobalPos;
 
-pub struct ArrayBuilder<'a>(pub &'a [Vec2<Global>]);
+pub struct ArrayBuilder<'a>(pub &'a [GlobalPos]);
 
 impl ArrayBuilder<'_> {
     pub fn type_string(&self) -> String {
-        format!(
-            "[::async_kartoffel::Vec2<::async_kartoffel::Global>; {}]",
-            self.0.len()
-        )
+        format!("[::kartoffel_gps::GlobalPos; {}]", self.0.len())
     }
 }
 
 impl Display for ArrayBuilder<'_> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(f, "[\n",)?;
-        for vec in self.0 {
+        for pos in self.0 {
+            let vec = pos.sub_anchor();
             write!(
                 f,
-                "    ::async_kartoffel::Vec2::new_global({}, {}),\n",
+                "    ::kartoffel_gps::GlobalPos::add_to_anchor(::async_kartoffel::Vec2::new_global({}, {})),\n",
                 vec.east(),
                 vec.north()
             )?;

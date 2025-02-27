@@ -1,14 +1,15 @@
 use crate::map::{Map, PositionBiMap};
-use async_kartoffel::{Direction, Global, Vec2};
+use async_kartoffel::{Direction, Vec2};
+use kartoffel_gps::GlobalPos;
 use ndarray::{Array1, Array2, Axis};
 use ndarray_stats::QuantileExt;
 
 /// Trivial navigable means: No matter where you go, if the general direction is correct, you will
 /// reach your target.
-pub fn get_trivial_navigables(map: &Map, target: Vec2<Global>) -> Vec<Vec2<Global>> {
+pub fn get_trivial_navigables(map: &Map, target: GlobalPos) -> Vec<GlobalPos> {
     let mut start = map.new_like();
 
-    let mut ret: Vec<Vec2<Global>> = Default::default();
+    let mut ret: Vec<GlobalPos> = Default::default();
 
     if map.get(target) != Some(true) {
         return ret;

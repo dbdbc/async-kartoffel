@@ -33,8 +33,8 @@ async fn main_task(mut bot: Bot) -> ! {
         let t = Instant::now();
         let pos = get_global_pos(&chunk);
         let dur = (Instant::now() - t).unwrap();
-        if let Some((south, east)) = pos {
-            println!("global pos: ({}, {})", east, south);
+        if let Some(gpos) = pos {
+            println!("global pos: ({})", gpos);
         } else {
             println!("global pos unknown");
         }

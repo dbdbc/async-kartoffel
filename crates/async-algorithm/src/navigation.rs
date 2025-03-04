@@ -5,7 +5,7 @@ use heapless::{FnvIndexMap, Vec};
 
 use super::{
     breakpoint::Breakpoint,
-    error::{NoTarget, OutOfMemory},
+    error::{NoDestination, OutOfMemory},
     DistanceManhattan, DistanceMeasure, Map,
 };
 
@@ -271,7 +271,7 @@ impl core::fmt::Display for NavigationTask {
     }
 }
 
-/// A interruptable navigation computation to a fixed target.
+/// A interruptable navigation computation to a fixed destination.
 pub struct Navigation<T: Map<Option<NonZeroU16>>, const N: usize> {
     /// Actually does not store distance, but distance plus one, to take advantage of niche
     /// optimizations. It should only be modified using [`distances_set`] to prevent errors.
@@ -340,7 +340,7 @@ impl<T: Map<Option<NonZeroU16>>, const N: usize> Navigation<T, N> {
     }
 
     // TODO implement lazy, and add actual computation to run
-    pub fn update_start(&mut self, new_start: Position) -> Result<(), NoTarget> {
+    pub fn update_start(&mut self, new_start: Position) -> Result<(), NoDestination> {
         enum StateWithoutData {
             Success,
             Running,
@@ -368,7 +368,7 @@ impl<T: Map<Option<NonZeroU16>>, const N: usize> Navigation<T, N> {
             State::Running(progress) => update_task(&mut self.distances, progress, new_start),
             State::Success(progress) => update_task(&mut self.distances, progress, new_start),
             State::Impossible(progress) => update_task(&mut self.distances, progress, new_start),
-            _ => return Err(NoTarget),
+            _ => return Err(NoDestination),
         };
         match result {
             StateWithoutData::Success => self.state.success(),

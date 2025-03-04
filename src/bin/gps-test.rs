@@ -7,7 +7,7 @@
 use async_kartoffel::{println, Bot, Instant, Rotation, Vec2, D7 as DRadar};
 use embassy_executor::{task, Executor};
 use example_kartoffels::{get_global_pos, global_pos_entries};
-use kartoffel_gps::gps::{Chunk, MapSection};
+use kartoffel_gps::gps::{MapSection, MapSectionTrait};
 use static_cell::StaticCell;
 
 #[no_mangle]
@@ -29,7 +29,7 @@ async fn main_task(mut bot: Bot) -> ! {
     loop {
         let scan = bot.radar.scan::<DRadar>().await;
 
-        let chunk = Chunk::from_scan(&scan, facing);
+        let chunk = MapSection::from_scan(&scan, facing);
         let t = Instant::now();
         let pos = get_global_pos(&chunk);
         let dur = (Instant::now() - t).unwrap();

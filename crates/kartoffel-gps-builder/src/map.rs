@@ -2,7 +2,8 @@ use anyhow::anyhow;
 use async_kartoffel::Tile;
 use async_kartoffel::Vec2;
 use core::default::Default;
-use kartoffel_gps::gps::MapSection;
+use core::fmt::Display;
+use kartoffel_gps::gps::MapSectionTrait;
 use kartoffel_gps::GlobalPos;
 use std::{
     collections::HashMap,
@@ -39,6 +40,16 @@ impl PositionBiMap {
     pub fn len(&self) -> usize {
         self.v.len()
     }
+    pub fn subset(&self, indices: &[usize]) -> Self {
+        let mut v = Vec::new();
+        let mut h = HashMap::new();
+        for index in indices {
+            let &pos = self.vec().get(*index).expect("index should be in range");
+            h.insert(pos, v.len());
+            v.push(pos);
+        }
+        Self { v, h }
+    }
 }
 
 impl Map {
@@ -64,7 +75,7 @@ impl Map {
                     let pos = GlobalPos::default()
                         + Vec2::new_east(i_east as i16)
                         + Vec2::new_south(i_south as i16);
-                    if self.get(pos).is_some_and(|b| b) {
+                    if self.get(pos) {
                         positions_v.push(pos);
                         positions_h.insert(pos, index);
                         index += 1;
@@ -78,15 +89,19 @@ impl Map {
         }
     }
 
-    pub fn get(&self, pos: GlobalPos) -> Option<bool> {
+    pub fn get(&self, pos: GlobalPos) -> bool {
         let vec = pos - GlobalPos::default();
-        let south = usize::try_from(vec.south()).ok()?;
-        let east = usize::try_from(vec.east()).ok()?;
+        let Ok(south) = usize::try_from(vec.south()) else {
+            return false;
+        };
+        let Ok(east) = usize::try_from(vec.east()) else {
+            return false;
+        };
 
         if south < self.height && east < self.width {
-            Some(self.tiles[south * self.width + east])
+            self.tiles[south * self.width + east]
         } else {
-            None
+            false
         }
     }
 
@@ -104,7 +119,7 @@ impl Map {
     }
 
     /// get chunks where center is walkable
-    pub fn get_chunks<T: MapSection>(&self) -> HashMap<T, Vec<GlobalPos>> {
+    pub fn get_chunks<T: MapSectionTrait>(&self) -> HashMap<T, Vec<GlobalPos>> {
         let mut chunks: HashMap<_, Vec<_>> = HashMap::new();
         for center_south in 0..i16::try_from(self.height).unwrap() {
             for center_east in 0..i16::try_from(self.width).unwrap() {
@@ -120,7 +135,7 @@ impl Map {
         chunks
     }
 
-    pub fn unique_chunks<T: MapSection>(&self) -> Vec<(T, GlobalPos)> {
+    pub fn unique_chunks<T: MapSectionTrait>(&self) -> Vec<(T, GlobalPos)> {
         let chunks = self.get_chunks::<T>();
 
         let mut unique_chunks = Vec::new();
@@ -132,8 +147,8 @@ impl Map {
         unique_chunks
     }
 
-    pub fn get_chunk<T: MapSection>(&self, center: GlobalPos) -> T {
-        T::from_function(|vec| self.get(center + vec).is_some_and(|b| b))
+    pub fn get_chunk<T: MapSectionTrait>(&self, center: GlobalPos) -> T {
+        T::from_function(|vec| self.get(center + vec))
     }
 
     pub fn from_path(path: impl AsRef<Path>) -> anyhow::Result<Self> {
@@ -256,6 +271,33 @@ impl Map {
             })
         }
     }
+
+    pub fn builder(&self) -> TrueMapBuilder {
+        let mut data = Vec::<u8>::new();
+        let mut index = 0usize;
+        for i_south in 0..self.height {
+            for i_east in 0..self.width {
+                let pos = GlobalPos::default()
+                    + Vec2::new_east(i_east as i16)
+                    + Vec2::new_south(i_south as i16);
+                let rem = index.rem_euclid(8);
+                if rem == 0 {
+                    data.push(0u8);
+                }
+                if self.get(pos) {
+                    // unwrap: we pushed before
+                    let last = (&mut data).iter_mut().last().unwrap();
+                    *last = *last ^ (1u8 << rem);
+                }
+                index += 1;
+            }
+        }
+        TrueMapBuilder {
+            data,
+            width: self.width,
+            height: self.height,
+        }
+    }
 }
 
 impl IncompleteMap {
@@ -309,6 +351,40 @@ impl IncompleteMap {
             };
             vec.push(walkable);
         }
+        Ok(())
+    }
+}
+
+pub struct TrueMapBuilder {
+    data: Vec<u8>,
+    width: usize,
+    height: usize,
+}
+
+impl TrueMapBuilder {
+    pub fn type_string(&self) -> String {
+        format!(
+            "::kartoffel_gps::map::TrueMapImpl<{}, {}, {}>",
+            self.width,
+            self.height,
+            self.data.len()
+        )
+    }
+}
+
+impl Display for TrueMapBuilder {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(
+            f,
+            "::kartoffel_gps::map::TrueMapImpl::<{}, {}, {}> ([",
+            self.width,
+            self.height,
+            self.data.len()
+        )?;
+        for d in &self.data {
+            write!(f, "{}, ", d)?;
+        }
+        write!(f, "])")?;
         Ok(())
     }
 }

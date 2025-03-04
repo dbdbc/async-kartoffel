@@ -1,7 +1,9 @@
 use core::{fmt::Display, iter::Iterator};
 
+use crate::graph::GraphMapping;
 use kartoffel_gps::const_graph::ConstSparseGraphNode;
-use ndarray::{Array2, Axis};
+
+use crate::beacon_nav::PosGraph;
 
 #[derive(Default)]
 pub struct ConstSparseGraphBuilder {
@@ -12,24 +14,24 @@ pub struct ConstSparseGraphBuilder {
 }
 
 impl ConstSparseGraphBuilder {
-    pub fn from_matrix(mat: &Array2<u32>) -> Self {
-        let n = mat.len_of(Axis(0));
-        assert!(mat.len_of(Axis(1)) == n);
+    pub fn from_graph(graph: &PosGraph) -> Self {
+        assert!(graph.get_map_start().equals(graph.get_map_destination()));
+        let n = graph.len_start();
 
         let mut builder = Self::default();
 
         for i1 in 0..n {
-            let mut before = Vec::new();
-            let mut after = Vec::new();
+            let mut before_i1 = Vec::new();
+            let mut after_i1 = Vec::new();
             for i2 in 0..n {
-                if mat[(i1, i2)] > 0 {
-                    before.push(u16::try_from(i2).unwrap());
+                if graph.get(i1, i2).is_some() {
+                    after_i1.push(u16::try_from(i2).unwrap());
                 }
-                if mat[(i2, i1)] > 0 {
-                    after.push(u16::try_from(i2).unwrap());
+                if graph.get(i2, i1).is_some() {
+                    before_i1.push(u16::try_from(i2).unwrap());
                 }
             }
-            builder.add_node(&before, &after);
+            builder.add_node(&before_i1, &after_i1);
         }
         builder
     }
@@ -95,9 +97,9 @@ impl Display for ConstSparseGraphBuilder {
         }
         write!(f, "    ],\n    data: [")?;
         for d in &self.data {
-            write!(f, "        {},\n", d)?;
+            write!(f, "{}, ", d)?;
         }
-        write!(f, "    ]\n}}")?;
+        write!(f, "],\n}}")?;
         Ok(())
     }
 }

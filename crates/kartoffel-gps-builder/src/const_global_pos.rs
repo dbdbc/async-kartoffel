@@ -17,7 +17,7 @@ impl Display for ArrayBuilder<'_> {
             let vec = pos.sub_anchor();
             write!(
                 f,
-                "    ::kartoffel_gps::GlobalPos::add_to_anchor(::async_kartoffel::Vec2::new_global({}, {})),\n",
+                "    ::kartoffel_gps::pos::pos_east_north({}, {}),\n",
                 vec.east(),
                 vec.north()
             )?;

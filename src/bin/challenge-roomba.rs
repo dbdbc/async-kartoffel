@@ -123,7 +123,7 @@ fn movement<Size: RadarSize>(
     direction: Direction,
     radar_scan: &RadarScan<Size>,
     scan_pos: Position,
-    navigation_target: Option<Position>,
+    navigation_destination: Option<Position>,
 ) -> Option<MotorAction> {
     MotorAction::ALL_AND_NOTHING
         .into_iter()
@@ -135,10 +135,10 @@ fn movement<Size: RadarSize>(
                     .at((pos - scan_pos).local(direction) + translation)
                     .is_some_and(|tile| tile.is_empty())
             {
-                let eval = navigation_target.map_or(0, |target| {
+                let eval = navigation_destination.map_or(0, |destination| {
                     let pos_next = pos + translation.global(direction);
                     let ori_next = direction + rotation;
-                    distance_walk_with_rotation(target - pos_next, ori_next)
+                    distance_walk_with_rotation(destination - pos_next, ori_next)
                 });
                 Some((motor_action, eval))
             } else {
@@ -170,7 +170,7 @@ async fn foreground(
 
     let mut direction = bot.compass.try_direction().unwrap();
 
-    let mut nav_target: Option<Position> = None;
+    let mut nav_destination: Option<Position> = None;
 
     'main_loop: loop {
         let radar_scan = &radar.scan::<D5>().await;
@@ -185,12 +185,14 @@ async fn foreground(
             arm.pick().await;
         }
 
-        // update navigation target, if background task has provided a new update
-        if let Some(target) = signal_nav.try_take() {
-            nav_target = Some(target);
+        // update navigation destination, if background task has provided a new update
+        if let Some(destination) = signal_nav.try_take() {
+            nav_destination = Some(destination);
         }
 
-        while let Some(motor_action) = movement(pos, direction, radar_scan, scan_pos, nav_target) {
+        while let Some(motor_action) =
+            movement(pos, direction, radar_scan, scan_pos, nav_destination)
+        {
             if !execute_until_radar_ready(radar, motor, motor_action, &mut pos, &mut direction)
                 .await
             {
@@ -237,7 +239,7 @@ async fn background(
     map.set(Default::default(), Terrain::Walkable).unwrap();
     exploration.initialize(&mut map, Default::default());
 
-    let mut target: Option<Position> = None;
+    let mut destination: Option<Position> = None;
     let mut exploration_completed = false;
     let mut flags = Vec::<Position, 4>::new();
     let mut last_update: Option<MapUpdate> = None;
@@ -299,13 +301,13 @@ async fn background(
         }
         Breakpoint::new().await;
 
-        // reset target if reached
-        if target == Some(scan_pos) {
-            target = None
+        // reset destination if reached
+        if destination == Some(scan_pos) {
+            destination = None
         }
-        // flags are priority targets
-        if target.is_none_or(|target| !flags.contains(&target)) {
-            if let Some(&target_flag) = flags
+        // flags are priority destination
+        if destination.is_none_or(|destination| !flags.contains(&destination)) {
+            if let Some(&destination_flag) = flags
                 .iter()
                 .filter(|&&flag_pos| {
                     map.get(flag_pos)
@@ -313,12 +315,12 @@ async fn background(
                 })
                 .min_by_key(|&&flag_pos| DistanceManhattan::measure(flag_pos - scan_pos))
             {
-                target = Some(target_flag);
-                nav.initialize(scan_pos, target_flag);
+                destination = Some(destination_flag);
+                nav.initialize(scan_pos, destination_flag);
             }
         }
-        // target at border of known reachable
-        if target.is_none() {
+        // destination at border of known reachable
+        if destination.is_none() {
             if let Some(mut unknown_reachables) = exploration.border(&mut map) {
                 fn update_closest(
                     closest: &mut Option<(Position, u16)>,
@@ -355,9 +357,9 @@ async fn background(
                     Breakpoint::new().await;
                 }
 
-                if let Some((target_pos, _)) = closest {
-                    target = Some(target_pos);
-                    nav.initialize(scan_pos, target_pos);
+                if let Some((destination_pos, _)) = closest {
+                    destination = Some(destination_pos);
+                    nav.initialize(scan_pos, destination_pos);
                 }
             }
         }

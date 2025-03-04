@@ -25,4 +25,4 @@ impl From<MapInconsistent> for MapError {
 
 /// tried to change the navigations start position, but there is not currently a navigation running
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub struct NoTarget;
+pub struct NoDestination;

@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use kartoffel_gps::{IncompleteMap, Map};
+use kartoffel_gps_builder::map::{IncompleteMap, Map};
 
 fn main() {
     let map_dir = Path::new("./data/maps/grotta");

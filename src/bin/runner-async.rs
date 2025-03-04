@@ -89,37 +89,34 @@ pub trait Evaluation {
 
 // #[derive(Clone)]
 // struct NavigationEvaluation {
-//     next_target: Position,
+//     next_destination: Position,
 // }
 // impl NavigationEvaluation {
-//     fn new(next_target: Position) -> Self {
-//         Self { next_target }
+//     fn new(next_destination: Position) -> Self {
+//         Self { next_destination }
 //     }
 // }
 // impl Evaluation for NavigationEvaluation {
 //     fn get_at(&self, pos: Position, direction: Direction) -> u8 {
-//         distance_walk_with_rotation(self.next_target - pos, direction) as u8
+//         distance_walk_with_rotation(self.next_destination - pos, direction) as u8
 //     }
 // }
 
 #[derive(Clone)]
 struct NavigationEvaluationN<const N: usize> {
-    next_targets: Vec<Position, N>,
+    waypoints: Vec<Position, N>,
     range: u16,
 }
 impl<const N: usize> NavigationEvaluationN<N> {
-    fn new(next_targets: Vec<Position, N>, range: u16) -> Self {
-        Self {
-            next_targets,
-            range,
-        }
+    fn new(waypoints: Vec<Position, N>, range: u16) -> Self {
+        Self { waypoints, range }
     }
 }
 impl<const N: usize> Evaluation for NavigationEvaluationN<N> {
     fn get_at(&self, pos: Position, direction: Direction) -> u8 {
-        for &target in self.next_targets.iter().rev() {
-            if DistanceBotWalk::measure(target - pos) < self.range {
-                return distance_walk_with_rotation(target - pos, direction) as u8;
+        for &waypoint in self.waypoints.iter().rev() {
+            if DistanceBotWalk::measure(waypoint - pos) < self.range {
+                return distance_walk_with_rotation(waypoint - pos, direction) as u8;
             }
         }
         return u8::MAX;
@@ -467,7 +464,7 @@ async fn background(
     map.set(Default::default(), Terrain::Walkable).unwrap();
     exploration.initialize(&mut map, Default::default());
 
-    let mut target: Option<Position> = None;
+    let mut destination: Option<Position> = None;
     let mut exploration_completed = false;
     let mut last_update: Option<MapUpdate> = None;
 
@@ -514,13 +511,13 @@ async fn background(
         }
         Breakpoint::new().await;
 
-        // reset target if reached
+        // reset destination if reached
         println!("rt");
-        if target == Some(scan_pos) {
-            target = None
+        if destination == Some(scan_pos) {
+            destination = None
         }
-        // target at border of known reachable
-        if target.is_none() {
+        // destination at border of known reachable
+        if destination.is_none() {
             if let Some(mut unknown_reachables) = exploration.border(&mut map) {
                 fn update_closest(
                     closest: &mut Option<(Position, u16)>,
@@ -557,9 +554,9 @@ async fn background(
                     Breakpoint::new().await;
                 }
 
-                if let Some((target_pos, _)) = closest {
-                    target = Some(target_pos);
-                    nav.initialize(scan_pos, target_pos);
+                if let Some((destination_pos, _)) = closest {
+                    destination = Some(destination_pos);
+                    nav.initialize(scan_pos, destination_pos);
                 }
             }
         }
@@ -584,7 +581,7 @@ async fn background(
         println!("ns");
         if nav.get_state().is_success() {
             println!("ns-");
-            let mut targets = Vec::<Position, 3>::new();
+            let mut destinations = Vec::<Position, 3>::new();
             let mut pos = scan_pos;
             let range = 2u16;
             let mut counter = 0u16;
@@ -595,22 +592,22 @@ async fn background(
                 pos += Vec2::from_direction(dir, 1);
                 counter = (counter + 1).rem_euclid(range);
                 if counter.rem_euclid(range) == 0 {
-                    let Ok(_) = targets.push(pos) else { break };
+                    let Ok(_) = destinations.push(pos) else { break };
                 }
             }
             print!("ev {}", scan_pos);
-            for pos in &targets {
+            for pos in &destinations {
                 print!("ev {}", pos);
             }
             println!();
-            signal_nav.signal(NavigationEvaluationN::new(targets, range));
+            signal_nav.signal(NavigationEvaluationN::new(destinations, range));
         } else {
             // TODO there is an error
             println!("{:?}", nav.get_state());
             print_map(map.deref(), scan_pos, -3..=3, -3..=3, |pos| {
                 if pos == scan_pos {
                     Some('@')
-                } else if Some(pos) == target {
+                } else if Some(pos) == destination {
                     Some('x')
                 } else {
                     nav.get_dist_at(pos)

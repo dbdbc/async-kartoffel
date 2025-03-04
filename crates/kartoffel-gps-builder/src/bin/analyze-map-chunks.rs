@@ -1,8 +1,7 @@
 use std::{collections::HashMap, path::Path};
 
-use kartoffel_gps::Chunk;
-use kartoffel_gps::MapSection;
-use kartoffel_gps_builder::Map;
+use kartoffel_gps::gps::MapSection;
+use kartoffel_gps_builder::map::Map;
 
 fn main() {
     const CHUNK_SIZE: usize = 9;
@@ -11,9 +10,9 @@ fn main() {
     let map = Map::from_path(map_location).unwrap();
     println!("walkable tiles: {}", map.n_walkable());
 
-    let chunks = map.get_chunks::<Chunk<CHUNK_SIZE>>();
+    let chunks = map.get_chunks::<MapSection<CHUNK_SIZE>>();
 
-    let mut multiplicities: HashMap<usize, Vec<Chunk<CHUNK_SIZE>>> = HashMap::new();
+    let mut multiplicities: HashMap<usize, Vec<MapSection<CHUNK_SIZE>>> = HashMap::new();
     for (chunk, locations) in &chunks {
         let count = locations.len();
         multiplicities.entry(count).or_default().push(chunk.clone());

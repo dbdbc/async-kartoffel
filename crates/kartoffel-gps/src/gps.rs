@@ -5,7 +5,7 @@ use async_kartoffel::{Direction, Global, RadarScan, RadarSize, Vec2, D3, D5, D7,
 #[derive(Debug, Eq, PartialEq, PartialOrd, Ord, Hash, Clone, Copy)]
 pub struct OutOfBounds;
 
-pub trait MapSection: Default + Hash + PartialEq + Eq + PartialOrd + Ord + Clone {
+pub trait MapSectionTrait: Default + Hash + PartialEq + Eq + PartialOrd + Ord + Clone {
     type Size: RadarSize;
     type Compressed: phf_shared::FmtConst + phf_shared::PhfHash + Eq + Hash;
     fn compressed_type() -> &'static str;
@@ -46,9 +46,9 @@ pub trait MapSection: Default + Hash + PartialEq + Eq + PartialOrd + Ord + Clone
 }
 
 #[derive(Debug, Eq, PartialEq, PartialOrd, Ord, Hash, Clone)]
-pub struct Chunk<const N: usize>([[bool; N]; N]);
+pub struct MapSection<const N: usize>([[bool; N]; N]);
 
-impl<const N: usize> Display for Chunk<N> {
+impl<const N: usize> Display for MapSection<N> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         for line in self.0 {
             for val in line {
@@ -60,13 +60,13 @@ impl<const N: usize> Display for Chunk<N> {
     }
 }
 
-impl<const N: usize> Default for Chunk<N> {
+impl<const N: usize> Default for MapSection<N> {
     fn default() -> Self {
-        Chunk([[false; N]; N])
+        MapSection([[false; N]; N])
     }
 }
 
-impl MapSection for Chunk<3> {
+impl MapSectionTrait for MapSection<3> {
     type Size = D3;
     type Compressed = [u8; 1];
 
@@ -140,7 +140,7 @@ impl MapSection for Chunk<3> {
     }
 }
 
-impl MapSection for Chunk<5> {
+impl MapSectionTrait for MapSection<5> {
     type Size = D5;
     type Compressed = [u8; 3];
 
@@ -214,7 +214,7 @@ impl MapSection for Chunk<5> {
     }
 }
 
-impl MapSection for Chunk<7> {
+impl MapSectionTrait for MapSection<7> {
     type Size = D7;
     type Compressed = [u8; 6];
 
@@ -288,7 +288,7 @@ impl MapSection for Chunk<7> {
     }
 }
 
-impl MapSection for Chunk<9> {
+impl MapSectionTrait for MapSection<9> {
     type Size = D9;
     type Compressed = [u8; 10];
 

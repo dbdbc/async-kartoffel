@@ -1,6 +1,6 @@
 use core::{fmt::Display, ops::Range};
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq, Ord, PartialOrd, Clone, Copy, Hash)]
 pub struct ConstSparseGraphNode {
     pub start: u16,
     pub mid: u16,
@@ -20,18 +20,25 @@ impl Display for ConstSparseGraphNode {
     }
 }
 
+pub trait Graph {
+    fn after(&self, index: u16) -> &[u16];
+    fn before(&self, index: u16) -> &[u16];
+    fn size(&self) -> u16;
+}
+
+#[derive(Debug, Eq, PartialEq, Ord, PartialOrd, Clone, Hash)]
 pub struct ConstSparseGraph<const N_NODES: usize, const N_STORE: usize> {
     pub nodes: [ConstSparseGraphNode; N_NODES],
     pub data: [u16; N_STORE],
 }
-impl<const N_NODES: usize, const N_STORE: usize> ConstSparseGraph<N_NODES, N_STORE> {
-    pub fn after(&self, index: u16) -> &[u16] {
+impl<const N_NODES: usize, const N_STORE: usize> Graph for ConstSparseGraph<N_NODES, N_STORE> {
+    fn after(&self, index: u16) -> &[u16] {
         &self.data[self.nodes[usize::from(index)].range_after()]
     }
-    pub fn before(&self, index: u16) -> &[u16] {
+    fn before(&self, index: u16) -> &[u16] {
         &self.data[self.nodes[usize::from(index)].range_before()]
     }
-    pub fn size(&self) -> u16 {
+    fn size(&self) -> u16 {
         u16::try_from(N_NODES).unwrap()
     }
 }

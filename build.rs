@@ -4,6 +4,7 @@ use std::io::{BufWriter, Write};
 use std::path::Path;
 
 use kartoffel_gps::gps::{MapSection, MapSectionTrait};
+use kartoffel_gps::pos::pos_east_north;
 use kartoffel_gps::GlobalPos;
 use kartoffel_gps_builder::{
     beacon_nav::{build_trivial_navigation_graph, find_beacons, get_beacon_info},
@@ -81,6 +82,41 @@ fn add_beacons(file: &mut BufWriter<impl Write>, map: &Map, max_beacon_dist: u32
         beacon_info
     )
     .unwrap();
+    write!(
+        file,
+        "const NAV_MAX_PATH_LEN: usize = {};\n
+        const NAV_MAX_ACTIVE: usize = {};\n
+        const NAV_MAX_ENTRY: usize = {};\n
+        const NAV_MAX_EXIT: usize = {};\n
+        const NAV_TRIV_BUFFER: usize = {};\n",
+        beacon_info.max_path_length.next_power_of_two(),
+        64, // TODO
+        beacon_info.max_beacons_entry.next_power_of_two(),
+        beacon_info.max_beacons_exit.next_power_of_two(),
+        (beacon_info.max_beacon_dist + 2)
+            .div_ceil(2)
+            .next_power_of_two()
+    )
+    .unwrap();
+
+    let mut map_chars: Vec<Vec<char>> = Vec::new();
+    for row in 0..map.height {
+        let mut row_chars = Vec::new();
+        for col in 0..map.width {
+            let pos = pos_east_north(col as i16, -(row as i16));
+            row_chars.push(if map.get(pos) { '.' } else { '#' });
+        }
+        map_chars.push(row_chars);
+    }
+    for pos in beacon_positions.vec() {
+        let row = pos.sub_anchor().south() as usize;
+        let col = pos.sub_anchor().east() as usize;
+        map_chars[row][col] = '*';
+    }
+    writeln!(file, "\n // beacons").unwrap();
+    for row in map_chars {
+        writeln!(file, "// {}", row.into_iter().collect::<String>()).unwrap();
+    }
 }
 
 fn add_gps<T: MapSectionTrait>(file: &mut BufWriter<impl Write>, map: &Map) {
@@ -102,7 +138,7 @@ fn add_gps<T: MapSectionTrait>(file: &mut BufWriter<impl Write>, map: &Map) {
             .expect("center should be east (right)");
         builder.entry(
             chunk.compress().expect("center should be walkable"),
-            &std::format!("({}, {})", center_south, center_east),
+            &std::format!("({}, {})", center_east, center_south),
         );
     }
 

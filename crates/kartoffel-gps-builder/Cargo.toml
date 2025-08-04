@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-kartoffel-gps = {path = "../../crates/kartoffel-gps"}
+kartoffel-gps = {path = "../../crates/kartoffel-gps", default-features = false}
 async-kartoffel = {path = "../../crates/async-kartoffel", default-features = false}
 anyhow = {workspace = true, default-features = true}
 ndarray = {workspace = true, default-features = true}

@@ -9,10 +9,10 @@ use async_kartoffel::{
 };
 use embassy_executor::{task, Executor};
 use example_kartoffels::{
-    beacon_graph, beacon_info, beacons, get_global_pos, global_pos_entries, map,
+    beacon_graph, beacon_info, beacons, get_global_pos, global_pos_entries, make_navigator, map,
 };
 use kartoffel_gps::{
-    beacon,
+    beacon::{self, Navigator},
     gps::{MapSection, MapSectionTrait},
     GlobalPos,
 };
@@ -46,9 +46,9 @@ async fn main_task(mut bot: Bot) -> ! {
     let mut facing = bot.compass.direction().await;
     let mut pos = None;
 
-    // let mut navigator = beacon::Nav::new(map(), beacon_graph(), beacons(), beacon_info());
+    let mut navigator = make_navigator();
 
-    let target = GlobalPos::add_to_anchor(Vec2::new_global(46, -64));
+    let target = GlobalPos::add_to_anchor(Vec2::new_global(64, -46));
 
     println!("beacon test, trying to navigate to {}", target);
     println!("{:?}", beacon_info());
@@ -73,6 +73,24 @@ async fn main_task(mut bot: Bot) -> ! {
         }
 
         if let Some(pos) = pos {
+            navigator.initialize(pos, target);
+            println!("starting computation");
+            navigator.compute();
+            if let Some(nodes) = navigator.get_entry_nodes() {
+                println!("Some");
+                for &node in nodes {
+                    println!("{}: {}", node, beacons()[node]);
+                    // println!("{}", node);
+                }
+            }
+            if let Some(nodes) = navigator.get_exit_nodes() {
+                println!("Some");
+                for &node in nodes {
+                    println!("{}: {}", node, beacons()[node]);
+                    // println!("{}", node);
+                }
+            }
+            loop {}
             // TODO
         } else {
             // do random step

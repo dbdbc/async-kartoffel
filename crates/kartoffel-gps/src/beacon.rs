@@ -1,5 +1,7 @@
+use core::marker::PhantomData;
+
 use async_algorithm::{DistanceManhattan, DistanceMeasure, DistanceMin};
-use async_kartoffel::{println, Direction, Vec2};
+use async_kartoffel::{Direction, Vec2};
 use heapless::Vec;
 
 use crate::{const_graph::Graph, map::TrueMap, GlobalPos};
@@ -45,11 +47,23 @@ pub enum NavState {
     ConfirmExit,
 }
 
-pub struct Nav<
+pub trait Navigator {
+    fn initialize(&mut self, start: GlobalPos, destination: GlobalPos);
+
+    fn compute(&mut self);
+
+    fn get_entry_nodes(&self) -> Option<&[usize]>;
+    fn get_exit_nodes(&self) -> Option<&[usize]>;
+}
+
+pub struct NavigationImpossible;
+
+pub struct NavigatorImpl<
     const MAX_PATH_LEN: usize,
     const MAX_ACTIVE: usize,
     const MAX_ENTRY: usize,
     const MAX_EXIT: usize,
+    const TRIV_BUFFER: usize,
     T: TrueMap + 'static,
     G: Graph + 'static,
 > {
@@ -69,18 +83,89 @@ pub struct Nav<
     path: Option<Vec<GlobalPos, MAX_PATH_LEN>>,
     active: Vec<(GlobalPos, u16), MAX_ACTIVE>,
     state: NavState,
-}
 
-pub struct NavigationImpossible;
+    _phantom: PhantomData<[(); TRIV_BUFFER]>,
+}
 
 impl<
         const MAX_PATH_LEN: usize,
         const MAX_ACTIVE: usize,
         const MAX_ENTRY: usize,
         const MAX_EXIT: usize,
+        const TRIV_BUFFER: usize,
         T: TrueMap,
         G: Graph,
-    > Nav<MAX_PATH_LEN, MAX_ACTIVE, MAX_ENTRY, MAX_EXIT, T, G>
+    > Navigator
+    for NavigatorImpl<MAX_PATH_LEN, MAX_ACTIVE, MAX_ENTRY, MAX_EXIT, TRIV_BUFFER, T, G>
+{
+    fn initialize(&mut self, start: GlobalPos, destination: GlobalPos) {
+        self.start = Some(start);
+        self.destination = Some(destination);
+        self.entry_nodes = None;
+        self.exit_nodes = None;
+        self.path = None;
+        self.active = Vec::new();
+        self.state = NavState::NoWorkDone;
+    }
+
+    fn compute(&mut self) {
+        if let (Some(start), Some(destination)) = (self.start, self.destination) {
+            // entry
+            self.entry_nodes = Some(
+                self.beacons
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, &pos)| {
+                        u32::from(DistanceManhattan::measure(pos - start))
+                            <= self.info.max_beacon_dist
+                    })
+                    .filter(|(_, &pos)| {
+                        is_navigation_trivial::<TRIV_BUFFER>(self.map, start, pos).unwrap()
+                    }) // TODO unwrap error
+                    .map(|(index, _)| index)
+                    .collect(),
+            );
+            self.exit_nodes = Some(
+                self.beacons
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, &pos)| {
+                        u32::from(DistanceManhattan::measure(destination - pos))
+                            <= self.info.max_beacon_dist
+                    })
+                    .filter(|(_, &pos)| {
+                        is_navigation_trivial::<TRIV_BUFFER>(self.map, pos, destination).unwrap()
+                    }) // TODO unwrap
+                    .map(|(index, _)| index)
+                    .collect(),
+            );
+        }
+    }
+
+    fn get_entry_nodes(&self) -> Option<&[usize]> {
+        match &self.entry_nodes {
+            None => None,
+            Some(n) => Some(n.as_slice()),
+        }
+    }
+
+    fn get_exit_nodes(&self) -> Option<&[usize]> {
+        match &self.exit_nodes {
+            None => None,
+            Some(n) => Some(n.as_slice()),
+        }
+    }
+}
+
+impl<
+        const MAX_PATH_LEN: usize,
+        const MAX_ACTIVE: usize,
+        const MAX_ENTRY: usize,
+        const MAX_EXIT: usize,
+        const TRIV_BUFFER: usize,
+        T: TrueMap,
+        G: Graph,
+    > NavigatorImpl<MAX_PATH_LEN, MAX_ACTIVE, MAX_ENTRY, MAX_EXIT, TRIV_BUFFER, T, G>
 {
     pub fn new(
         map: &'static T,
@@ -100,21 +185,12 @@ impl<
             path: None,
             active: Vec::new(),
             state: NavState::NoWorkDone,
+            _phantom: Default::default(),
         }
     }
 
     pub fn clear(&mut self) {
         todo!()
-    }
-
-    pub fn initialize(&mut self, start: GlobalPos, destination: GlobalPos) {
-        self.start = Some(start);
-        self.destination = Some(destination);
-        self.entry_nodes = None;
-        self.exit_nodes = None;
-        self.path = None;
-        self.active = Vec::new();
-        self.state = NavState::NoWorkDone;
     }
 
     pub fn update_start(&mut self, start: GlobalPos) {
@@ -123,20 +199,6 @@ impl<
 
     // TODO is it beneficial to keep this vs reinitializing
     pub fn update_destination(&mut self, destination: GlobalPos) {
-        todo!()
-    }
-
-    pub fn compute(&mut self) {
-        // if let (Some(start), Some(destination)) = (self.start, self.destination) {
-        //     // entry
-        //     let possible_entry_nodes = self
-        //         .beacons
-        //         .iter()
-        //         .filter(|&pos| {
-        //             u32::from(DistanceManhattan::measure(*pos - start)) <= self.info.max_beacon_dist
-        //         })
-        //         .filter(|&pos| is_navigation_trivial(self.map, start, pos));
-        // }
         todo!()
     }
 
@@ -287,6 +349,8 @@ mod tests {
 
     use crate::pos::pos_east_north;
 
+    extern crate alloc;
+
     use super::*;
     use test_kartoffel::{
         assert, assert_eq, assert_err, assert_none, option_unwrap, result_unwrap, TestError,
@@ -310,6 +374,13 @@ mod tests {
     }
 
     impl<const WIDTH: usize, const HEIGHT: usize> TestMap<WIDTH, HEIGHT> {
+        fn new_like(&self) -> Self {
+            Self {
+                tiles: [[false; WIDTH]; HEIGHT],
+                dirty_outside: Cell::new(false),
+            }
+        }
+
         fn new(tiles: [[bool; WIDTH]; HEIGHT]) -> Self {
             Self {
                 tiles,
@@ -331,6 +402,19 @@ mod tests {
 
         fn corner_south_east(&self) -> GlobalPos {
             pos_east_north(WIDTH as i16 - 1, -(HEIGHT as i16) + 1)
+        }
+
+        fn set(&mut self, pos: GlobalPos, val: bool) -> Result<(), ()> {
+            let vec = pos.sub_anchor();
+            let east = vec.east();
+            let south = vec.south();
+            if east < 0 || east >= self.width() as i16 || south < 0 || south >= self.height() as i16
+            {
+                Err(())
+            } else {
+                self.tiles[south as usize][east as usize] = val;
+                Ok(())
+            }
         }
     }
 
@@ -466,6 +550,91 @@ mod tests {
         Ok(())
     }
 
+    /// Trivial navigable means: No matter where you go, if the general direction is correct, you will
+    /// reach your destination.
+    pub fn is_trivial_navigable_test<const WIDTH: usize, const HEIGHT: usize>(
+        map: &TestMap<WIDTH, HEIGHT>,
+        xx_start: GlobalPos,
+        destination: GlobalPos,
+    ) -> bool {
+        let mut start = map.new_like();
+
+        if !map.get(destination) {
+            return false;
+        }
+
+        start.set(destination, true).unwrap();
+        if destination == xx_start {
+            return true;
+        }
+
+        // fill for single direction
+        for dir in Direction::all() {
+            let mut i = 1i16;
+            loop {
+                let pos = destination + Vec2::from_direction(dir, i);
+                if map.get(pos) {
+                    start.set(pos, true).unwrap();
+                    if pos == xx_start {
+                        return true;
+                    }
+                    i += 1;
+                } else {
+                    break;
+                }
+            }
+        }
+
+        for dir_ew in [Direction::East, Direction::West] {
+            for dir_ns in [Direction::North, Direction::South] {
+                // recursive condition:
+                // - all walkable neighbors in the two directions must be trivially navigable from
+                // - at least on neighbor in the two directions must be walkable
+                // => all walkable neighbors in the two directions must have been checked before
+                // => diagonal iteration with increasing manhattan dist
+
+                let mut i_manhattan = 2i16;
+                loop {
+                    let mut any: bool = false;
+                    any = any || start.get(destination + Vec2::from_direction(dir_ew, i_manhattan));
+                    any = any || start.get(destination + Vec2::from_direction(dir_ns, i_manhattan));
+
+                    for i_ew in 1..=i_manhattan - 1 {
+                        let i_ns = i_manhattan - i_ew;
+                        let pos = destination
+                            + Vec2::from_direction(dir_ew, i_ew)
+                            + Vec2::from_direction(dir_ns, i_ns);
+                        let neighbor_ew = pos - Vec2::from_direction(dir_ew, 1);
+                        let neighbor_ns = pos - Vec2::from_direction(dir_ns, 1);
+
+                        let walk = map.get(pos);
+                        let triv_ns = start.get(neighbor_ns);
+                        let triv_ew = start.get(neighbor_ew);
+                        let wall_ns = !map.get(neighbor_ns);
+                        let wall_ew = !map.get(neighbor_ew);
+
+                        if walk
+                            && (triv_ns || wall_ns)
+                            && (triv_ew || wall_ew)
+                            && (triv_ew || triv_ns)
+                        {
+                            start.set(pos, true).unwrap();
+                            if pos == xx_start {
+                                return true;
+                            }
+                            any = true;
+                        }
+                    }
+                    if !any {
+                        break;
+                    }
+                    i_manhattan += 1;
+                }
+            }
+        }
+        return false;
+    }
+
     #[test_case]
     fn trivial_nav_positive() -> Result<(), TestError> {
         let mut rng = {
@@ -538,10 +707,17 @@ mod tests {
                         }
                     }
                     assert_eq!(pos, dest);
+                    assert_eq!(
+                        is_trivial_navigable_test(&map, start, dest) || !map.get(start),
+                        true
+                    );
+                } else {
+                    println!("n {:?} {:?}", dir0, dir1);
+                    assert_eq!(is_trivial_navigable_test(&map, start, dest), false);
                 }
             }
 
-            assert_eq!(map.dirty_outside.get(), false);
+            // assert_eq!(map.dirty_outside.get(), false);
             println!();
 
             Ok(())

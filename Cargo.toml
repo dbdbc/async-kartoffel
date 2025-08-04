@@ -59,7 +59,7 @@ rand.workspace = true
 [build-dependencies]
 phf = { version = "0.11.3", default-features = false }
 phf_codegen = "0.11.3"
-kartoffel-gps = {path = "crates/kartoffel-gps"}
+kartoffel-gps = {path = "crates/kartoffel-gps", default-features = false}
 kartoffel-gps-builder = {path = "crates/kartoffel-gps-builder"}
 
 [lib]

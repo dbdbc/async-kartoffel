@@ -2,7 +2,7 @@
 
 use async_kartoffel::Vec2;
 use kartoffel_gps::{
-    beacon::BeaconInfo,
+    beacon::{BeaconInfo, Navigator, NavigatorImpl},
     const_graph::Graph,
     gps::{MapSection, MapSectionTrait},
     map::TrueMap,
@@ -44,4 +44,16 @@ pub fn beacon_info() -> &'static BeaconInfo {
 
 pub fn map() -> &'static impl TrueMap {
     &TRUE_MAP
+}
+
+pub fn make_navigator() -> impl Navigator {
+    NavigatorImpl::<
+        NAV_MAX_PATH_LEN,
+        NAV_MAX_ACTIVE,
+        NAV_MAX_ENTRY,
+        NAV_MAX_EXIT,
+        NAV_TRIV_BUFFER,
+        _,
+        _,
+    >::new(&TRUE_MAP, &BEACON_GRAPH, &BEACON_POSITIONS, &BEACON_INFO)
 }

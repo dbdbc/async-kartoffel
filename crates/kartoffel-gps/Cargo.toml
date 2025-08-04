@@ -6,6 +6,10 @@ edition = "2021"
 [dependencies]
 phf_shared.workspace = true
 async-kartoffel = {path = "../../crates/async-kartoffel", default-features = false}
+async-algorithm = {path = "../../crates/async-algorithm", default-features = false}
+test-kartoffel = {path = "../../crates/test-kartoffel", optional = true}
+heapless.workspace = true
+rand.workspace = true
 
-[lib]
-test = false
+[features]
+default = ["test-kartoffel"]

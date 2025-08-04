@@ -6,7 +6,7 @@ use std::path::Path;
 use kartoffel_gps::gps::{MapSection, MapSectionTrait};
 use kartoffel_gps::GlobalPos;
 use kartoffel_gps_builder::{
-    beacon_nav::{build_trivial_navigation_graph, find_beacons},
+    beacon_nav::{build_trivial_navigation_graph, find_beacons, get_beacon_info},
     const_global_pos::ArrayBuilder,
     const_graph::ConstSparseGraphBuilder,
     map::Map,
@@ -18,6 +18,7 @@ fn main() {
     let file = &mut BufWriter::new(File::create(&path).unwrap());
 
     let map_path = "maps/map.txt";
+    println!("build.rs analysing map {}", map_path);
     println!("cargo::rerun-if-changed={}", map_path);
     let map = &Map::from_path(Path::new(map_path)).unwrap();
 
@@ -38,19 +39,25 @@ fn add_true_map(file: &mut BufWriter<impl Write>, map: &Map) {
 }
 
 fn add_beacons(file: &mut BufWriter<impl Write>, map: &Map, max_beacon_dist: u32) {
+    println!("creating navigation beacons");
+    println!("  finding walkable positions ...");
     let positions = map.walkable_positions();
+    println!("  creating trivial navigation graph ...");
     let asymmetric_graph = build_trivial_navigation_graph(&map, &positions);
+    println!("  selecting navigation beacons ...");
     let beacon_indices = find_beacons(max_beacon_dist, &asymmetric_graph);
+    println!("  create beacon trivial navigation (sub-)graph ...");
     let beacon_positions = asymmetric_graph.get_map_start().subset(&beacon_indices);
     let beacon_graph = asymmetric_graph.sub_graph(&beacon_positions, &beacon_positions);
-    // let beacon_info = get_beacon_info(
-    //     &beacon_indices,
-    //     positions.vec(),
-    //     &asymmetric_graph,
-    //     &beacon_graph,
-    //     &beacon_positions,
-    //     max_beacon_dist,
-    // );
+
+    let beacon_info = get_beacon_info(
+        &beacon_indices,
+        &positions,
+        &asymmetric_graph,
+        &beacon_graph,
+        max_beacon_dist,
+    );
+    println!("  beacon info: {:?}", beacon_info);
 
     let builder_graph = ConstSparseGraphBuilder::from_graph(&beacon_graph);
     let builder_pos = ArrayBuilder(beacon_positions.vec());
@@ -68,10 +75,24 @@ fn add_beacons(file: &mut BufWriter<impl Write>, map: &Map, max_beacon_dist: u32
         builder_pos
     )
     .unwrap();
+    write!(
+        file,
+        "const BEACON_INFO: ::kartoffel_gps::beacon::BeaconInfo = {:?};\n",
+        beacon_info
+    )
+    .unwrap();
 }
 
 fn add_gps<T: MapSectionTrait>(file: &mut BufWriter<impl Write>, map: &Map) {
-    let unique_chunks = map.unique_chunks::<T>();
+    let (unique_chunks, n_total) = map.unique_chunks::<T>();
+    {
+        let n_unique = unique_chunks.len();
+        let unique_percentage = n_unique as f64 / n_total as f64 * 100.0;
+        println!(
+            "writing unique chunks, {} of {} chunks are unique, that's {:.1}%",
+            n_unique, n_total, unique_percentage
+        );
+    }
 
     let mut builder = PhfMap::new();
     for (chunk, center) in unique_chunks {

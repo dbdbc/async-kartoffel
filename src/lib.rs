@@ -2,6 +2,7 @@
 
 use async_kartoffel::Vec2;
 use kartoffel_gps::{
+    beacon::BeaconInfo,
     const_graph::Graph,
     gps::{MapSection, MapSectionTrait},
     map::TrueMap,
@@ -35,6 +36,10 @@ pub fn beacon_graph() -> &'static impl Graph {
 
 pub fn beacons_before(index: u16) -> &'static [u16] {
     &BEACON_GRAPH.after(index)
+}
+
+pub fn beacon_info() -> &'static BeaconInfo {
+    &BEACON_INFO
 }
 
 pub fn map() -> &'static impl TrueMap {

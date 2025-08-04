@@ -7,7 +7,10 @@
 use async_kartoffel::{println, Bot, Instant, Rotation, Vec2, D7 as DRadar};
 use embassy_executor::{task, Executor};
 use example_kartoffels::{get_global_pos, global_pos_entries};
-use kartoffel_gps::gps::{MapSection, MapSectionTrait};
+use kartoffel_gps::{
+    gps::{MapSection, MapSectionTrait},
+    GlobalPos,
+};
 use static_cell::StaticCell;
 
 #[no_mangle]
@@ -24,7 +27,10 @@ fn main() {
 async fn main_task(mut bot: Bot) -> ! {
     let mut facing = bot.compass.direction().await;
 
-    println!("n unique: {:?}", global_pos_entries().count());
+    println!(
+        "number of uniquely identifyable positions: {:?}",
+        global_pos_entries().count()
+    );
 
     loop {
         let scan = bot.radar.scan::<DRadar>().await;

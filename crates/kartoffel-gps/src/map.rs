@@ -2,14 +2,8 @@ use async_kartoffel::{Global, Vec2};
 
 use crate::GlobalPos;
 
-// to prevent typing effort
-pub trait MapSize {
-    const WIDTH: i16;
-    const HEIGHT: i16;
-    const STORE: usize;
-}
-
 pub trait TrueMap {
+    /// is walkable
     fn get(&self, pos: GlobalPos) -> bool;
     fn vec_east(&self) -> Vec2<Global>;
     fn vec_south(&self) -> Vec2<Global>;

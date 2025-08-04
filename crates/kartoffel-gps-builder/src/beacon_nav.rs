@@ -170,5 +170,6 @@ pub fn get_beacon_info(
         max_beacons_entry: *graph.count_paths(&beacons).max().unwrap(),
         max_beacons_exit: *beacons.invert_direction().count_paths(graph).max().unwrap(),
         max_path_length: u32::try_from(beacon_graph.all_pairs().1).unwrap(),
+        n_beacons: u32::try_from(beacon_indices.len()).unwrap(),
     }
 }

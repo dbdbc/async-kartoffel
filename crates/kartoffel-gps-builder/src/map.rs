@@ -135,16 +135,18 @@ impl Map {
         chunks
     }
 
-    pub fn unique_chunks<T: MapSectionTrait>(&self) -> Vec<(T, GlobalPos)> {
+    pub fn unique_chunks<T: MapSectionTrait>(&self) -> (Vec<(T, GlobalPos)>, usize) {
         let chunks = self.get_chunks::<T>();
+        let mut n_total = 0;
 
         let mut unique_chunks = Vec::new();
         for (chunk, locations) in &chunks {
+            n_total += locations.len();
             if locations.len() == 1 {
                 unique_chunks.push((chunk.clone(), locations[0]));
             }
         }
-        unique_chunks
+        (unique_chunks, n_total)
     }
 
     pub fn get_chunk<T: MapSectionTrait>(&self, center: GlobalPos) -> T {

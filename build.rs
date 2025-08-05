@@ -85,17 +85,17 @@ fn add_beacons(file: &mut BufWriter<impl Write>, map: &Map, max_beacon_dist: u32
     write!(
         file,
         "const NAV_MAX_PATH_LEN: usize = {};\n
-        const NAV_MAX_ACTIVE: usize = {};\n
         const NAV_MAX_ENTRY: usize = {};\n
         const NAV_MAX_EXIT: usize = {};\n
-        const NAV_TRIV_BUFFER: usize = {};\n",
+        const NAV_TRIV_BUFFER: usize = {};\n
+        const NAV_NODE_BUFFER: usize = {};\n",
         beacon_info.max_path_length.next_power_of_two(),
-        64, // TODO
         beacon_info.max_beacons_entry.next_power_of_two(),
         beacon_info.max_beacons_exit.next_power_of_two(),
         (beacon_info.max_beacon_dist + 2)
             .div_ceil(2)
-            .next_power_of_two()
+            .next_power_of_two(),
+        (beacon_info.n_beacons + 2).next_power_of_two(),
     )
     .unwrap();
 

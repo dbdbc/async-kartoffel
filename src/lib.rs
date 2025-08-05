@@ -46,14 +46,29 @@ pub fn map() -> &'static impl TrueMap {
     &TRUE_MAP
 }
 
-pub fn make_navigator() -> impl Navigator {
-    NavigatorImpl::<
+pub fn get_navigator_info() -> (usize, usize, usize, usize, usize) {
+    (
         NAV_MAX_PATH_LEN,
-        NAV_MAX_ACTIVE,
         NAV_MAX_ENTRY,
         NAV_MAX_EXIT,
         NAV_TRIV_BUFFER,
+        NAV_NODE_BUFFER,
+    )
+}
+
+pub fn make_navigator() -> impl Navigator {
+    NavigatorImpl::<
+        NAV_MAX_PATH_LEN,
+        NAV_MAX_ENTRY,
+        NAV_MAX_EXIT,
+        NAV_TRIV_BUFFER,
+        NAV_NODE_BUFFER,
         _,
         _,
-    >::new(&TRUE_MAP, &BEACON_GRAPH, &BEACON_POSITIONS, &BEACON_INFO)
+    >::new(
+        &TRUE_MAP,
+        &BEACON_GRAPH,
+        &BEACON_POSITIONS,
+        u16::try_from(BEACON_INFO.max_beacon_dist).unwrap(),
+    )
 }

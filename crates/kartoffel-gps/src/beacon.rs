@@ -1,11 +1,8 @@
-use core::marker::PhantomData;
+use core::{convert::identity, marker::PhantomData};
 
 use alloc::boxed::Box;
 use async_algorithm::{DistanceManhattan, DistanceMeasure, DistanceMin};
 use async_kartoffel::{Direction, Vec2};
-
-#[cfg(target_arch = "riscv32")]
-use async_kartoffel::println;
 
 use heapless::{binary_heap::Min, BinaryHeap, Vec};
 
@@ -59,8 +56,6 @@ pub trait Navigator {
     fn good_dirs(&self) -> Option<Vec<Direction, 2>>;
 }
 
-pub struct NavigationImpossible;
-
 // Ord derived implementation ensures desired `Min` behaviour for the priority queue
 #[derive(PartialEq, Eq, Debug)]
 struct NavActiveEntry {
@@ -98,7 +93,7 @@ enum Node {
 }
 
 // Buffers that can be used for computations
-pub struct NavigatorBuffers<const MAX_ENTRY_EXIT: usize, const NODE_BUFFER: usize> {
+struct NavigatorBuffers<const MAX_ENTRY_EXIT: usize, const NODE_BUFFER: usize> {
     entry_nodes: Box<Vec<u16, MAX_ENTRY_EXIT>>,
     exit_nodes: Box<Vec<u16, MAX_ENTRY_EXIT>>,
     active: Box<BinaryHeap<NavActiveEntry, Min, NODE_BUFFER>>,
@@ -499,7 +494,11 @@ fn compute<
         .iter()
         .enumerate()
         .filter(|(_, &pos)| DistanceManhattan::measure(pos - start) <= max_beacon_dist)
-        .filter(|(_, &pos)| is_navigation_trivial::<TRIV_BUFFER>(map, start, pos).unwrap()) // TODO unwrap error
+        .filter(|(_, &pos)| {
+            // possible OutOfMemory error ignored here, but thats ok because it can only appear
+            // if TRIV_BUFFER is misconfigured
+            is_navigation_trivial::<TRIV_BUFFER>(map, start, pos).is_ok_and(identity)
+        })
         .map(|(index, _)| u16::try_from(index).unwrap())
         .collect();
 
@@ -517,7 +516,7 @@ fn compute<
             && is_navigation_trivial::<TRIV_BUFFER>(map, start, destination)
                 .map_err(|_| NavigatorError::OutOfMemory)?)
     {
-        // nothing to add to path
+        // nothing to add to path, navigation from start to destination is trivial
     } else {
         // graph initialization
         for &node_index in &*buffers.entry_nodes {
@@ -680,7 +679,7 @@ mod tests {
         assert, assert_eq, assert_err, assert_none, option_unwrap, result_unwrap, TestError,
     };
 
-    pub struct TestMap<const WIDTH: usize, const HEIGHT: usize> {
+    struct TestMap<const WIDTH: usize, const HEIGHT: usize> {
         tiles: [[bool; WIDTH]; HEIGHT],
         dirty_outside: Cell<bool>,
     }
@@ -876,7 +875,7 @@ mod tests {
 
     /// Trivial navigable means: No matter where you go, if the general direction is correct, you will
     /// reach your destination.
-    pub fn is_trivial_navigable_test<const WIDTH: usize, const HEIGHT: usize>(
+    fn is_trivial_navigable_test<const WIDTH: usize, const HEIGHT: usize>(
         map: &TestMap<WIDTH, HEIGHT>,
         xx_start: GlobalPos,
         destination: GlobalPos,

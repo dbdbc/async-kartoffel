@@ -4,9 +4,19 @@ use alloc::boxed::Box;
 use async_algorithm::{DistanceManhattan, DistanceMeasure, DistanceMin};
 use async_kartoffel::{Direction, Vec2};
 
+#[cfg(target_arch = "riscv32")]
+use async_kartoffel::println;
+
 use heapless::{binary_heap::Min, BinaryHeap, Vec};
 
 use crate::{const_graph::Graph, map::TrueMap, GlobalPos};
+
+#[derive(Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Clone, Copy)]
+pub enum NavigatorError {
+    OutOfMemory,
+    Uninitialized,
+    NavigationImpossible,
+}
 
 #[derive(Debug, Eq, PartialEq, Ord, PartialOrd, Clone, Hash)]
 pub struct BeaconInfo {
@@ -27,14 +37,25 @@ pub struct BeaconInfo {
 
 pub trait Navigator {
     fn initialize(&mut self, start: GlobalPos, destination: GlobalPos);
+
     fn reset(&mut self);
 
-    fn compute(&mut self);
+    fn get_start(&self) -> Option<GlobalPos>;
+
+    fn get_destination(&self) -> Option<GlobalPos>;
+
+    fn compute(&mut self) -> Result<(), NavigatorError>;
+
+    fn is_ready(&self) -> bool;
+
+    fn is_completed(&self) -> Option<bool>;
 
     fn get_path(&self) -> Option<&[u16]>;
 
-    fn move_start_to(&mut self, new_start: GlobalPos) -> Result<(), ()>;
+    fn move_start_to(&mut self, new_start: GlobalPos) -> Result<(), NavigatorError>;
+
     fn is_dir_good(&self, dir: Direction) -> Option<bool>;
+
     fn good_dirs(&self) -> Option<Vec<Direction, 2>>;
 }
 
@@ -139,7 +160,21 @@ impl<
         self.path = None;
     }
 
-    fn compute(&mut self) {
+    fn reset(&mut self) {
+        self.start = None;
+        self.destination = None;
+        self.path = None;
+    }
+
+    fn get_start(&self) -> Option<GlobalPos> {
+        self.start
+    }
+
+    fn get_destination(&self) -> Option<GlobalPos> {
+        self.destination
+    }
+
+    fn compute(&mut self) -> Result<(), NavigatorError> {
         if let (Some(start), Some(destination)) = (self.start, self.destination) {
             self.path = Some(Vec::new());
             compute::<MAX_PATH_LEN, MAX_ENTRY_EXIT, TRIV_BUFFER, NODE_BUFFER>(
@@ -152,8 +187,17 @@ impl<
                 self.max_beacon_dist,
                 &mut self.path.as_mut().unwrap(), // unwrap: we just created path
             )
-            .unwrap(); // TODO can fail
+        } else {
+            Err(NavigatorError::Uninitialized)
         }
+    }
+
+    fn is_ready(&self) -> bool {
+        self.start.is_some() && self.destination.is_some() && self.path.is_some()
+    }
+
+    fn is_completed(&self) -> Option<bool> {
+        Some(self.start? == self.destination?)
     }
 
     fn get_path(&self) -> Option<&[u16]> {
@@ -163,12 +207,12 @@ impl<
         }
     }
 
-    fn move_start_to(&mut self, new_start: GlobalPos) -> Result<(), ()> {
-        let good_dirs = self.good_dirs().ok_or(())?;
+    fn move_start_to(&mut self, new_start: GlobalPos) -> Result<(), NavigatorError> {
+        let good_dirs = self.good_dirs().ok_or(NavigatorError::Uninitialized)?;
 
-        let path = self.path.as_mut().ok_or(())?;
-        let old_start = self.start.as_mut().ok_or(())?;
-        let destination = self.destination.ok_or(())?;
+        let path = self.path.as_mut().ok_or(NavigatorError::Uninitialized)?;
+        let old_start = self.start.as_mut().ok_or(NavigatorError::Uninitialized)?;
+        let destination = self.destination.ok_or(NavigatorError::Uninitialized)?;
 
         // no movement
         if new_start == *old_start {
@@ -178,6 +222,7 @@ impl<
         let movement = new_start - *old_start;
         let movement_dirs = {
             let mut v = Vec::<Direction, 2>::new();
+            // unwraps: there can only be two directions to move to
             match movement.get(Direction::East) {
                 ..0 => v.push(Direction::West).unwrap(),
                 0 => {}
@@ -202,6 +247,7 @@ impl<
             // reached target
             _ = path.pop();
         } else if movement_steps == 1 && good_dirs.contains(movement_dirs.get(0).unwrap()) {
+            // unwrap: there is exactly one dir
             // preferred case: single step in good dir, is really easy because of trivial
             // navigation rules
             *old_start = new_start;
@@ -216,10 +262,9 @@ impl<
                 self.beacons,
                 self.max_beacon_dist,
                 path,
-            )
-            .unwrap(); // TODO can fail
-                       // TODO path len can no grow over time
+            )?;
         }
+        *old_start = new_start;
         Ok(())
     }
 
@@ -255,6 +300,7 @@ impl<
 
         let mut check_and_add = |dir: Direction| {
             if self.map.get(start + Vec2::from_direction(dir, 1)) {
+                // unwrap: there can only be two dirs to add
                 v.push(dir).unwrap();
             }
         };
@@ -271,12 +317,6 @@ impl<
         }
 
         Some(v)
-    }
-
-    fn reset(&mut self) {
-        self.start = None;
-        self.destination = None;
-        self.path = None;
     }
 }
 
@@ -317,10 +357,11 @@ fn is_navigation_trivial<const BUFFER_SIZE: usize>(
     map: &impl TrueMap,
     start: GlobalPos,
     destination: GlobalPos,
-) -> Result<bool, ()> {
+) -> Result<bool, NavigatorError> {
     let vector = destination - start;
     let dirs = {
         let mut dirs = Vec::<Direction, 2>::new();
+        // unwrap: there can only be two dirs to add
         match vector.east() {
             ..=-1 => dirs.push(Direction::West).unwrap(),
             0 => (),
@@ -344,6 +385,7 @@ fn is_navigation_trivial<const BUFFER_SIZE: usize>(
         // straight line, example
         // S X X X D
         // dist_man: 4
+        // unwrap: all distances are expected to fit in i16
         for i in 1..=i16::try_from(dist_man).unwrap() {
             if !map.get(start + Vec2::from_direction(dirs[0], i)) {
                 return Ok(false);
@@ -351,12 +393,13 @@ fn is_navigation_trivial<const BUFFER_SIZE: usize>(
         }
         Ok(true)
     } else {
+        // unwrap: all distances are expected to fit in i16, vector in dir is nonnegative
         let max_dir_0 = u16::try_from(vector.get(dirs[0])).unwrap();
         let max_dir_1 = dist_man - max_dir_0;
 
         // out of bounds
-        if usize::try_from(dist_min + 1).unwrap() > BUFFER_SIZE {
-            return Err(());
+        if usize::from(dist_min + 1) > BUFFER_SIZE {
+            return Err(NavigatorError::OutOfMemory);
         };
 
         let mut actives_next = [false; BUFFER_SIZE];
@@ -374,6 +417,7 @@ fn is_navigation_trivial<const BUFFER_SIZE: usize>(
         let pos_from_manhattan_and_index = |i_manhattan: u16, i_index: u16| {
             let dist_dir_0 = i_manhattan.min(max_dir_0);
             let dist_dir_1 = i_manhattan - dist_dir_0;
+            // unwrap: distances fit in i16
             start
                 + Vec2::from_direction(dirs[0], i16::try_from(dist_dir_0 - i_index).unwrap())
                 + Vec2::from_direction(dirs[1], i16::try_from(dist_dir_1 + i_index).unwrap())
@@ -385,6 +429,7 @@ fn is_navigation_trivial<const BUFFER_SIZE: usize>(
 
             let index_offset = if i_manhattan >= max_dir_0 { 1 } else { 0 };
 
+            // unwrap: there can only be two neighbors
             let mut next = Vec::<u16, 2>::new();
             if i_0 < max_dir_0 {
                 next.push(i_index - index_offset).unwrap();
@@ -444,7 +489,7 @@ fn compute<
 
     path: &mut Vec<u16, MAX_PATH_LEN>, // path in reverse order, calculation is appended, TODO can
                                        // no longer prevent overflow errors reliably now
-) -> Result<(), ()> {
+) -> Result<(), NavigatorError> {
     // clear intermediate state
     *buffers = Default::default();
     let mut node_info_destination: Option<(u16, Node)> = None;
@@ -469,7 +514,8 @@ fn compute<
 
     if start == destination
         || (DistanceManhattan::measure(destination - start) <= max_beacon_dist
-            && is_navigation_trivial::<TRIV_BUFFER>(map, start, destination).unwrap())
+            && is_navigation_trivial::<TRIV_BUFFER>(map, start, destination)
+                .map_err(|_| NavigatorError::OutOfMemory)?)
     {
         // nothing to add to path
     } else {
@@ -485,7 +531,7 @@ fn compute<
                     past_cost,
                     node: Node::Beacon(node_index),
                 })
-                .unwrap();
+                .map_err(|_| NavigatorError::OutOfMemory)?;
             buffers.node_info[usize::from(node_index)] = Some((past_cost, Node::Start));
         }
 
@@ -595,14 +641,15 @@ fn compute<
                     Node::Start => break,
                     Node::Destination => unreachable!(),
                     Node::Beacon(beacon_index) => {
-                        path.push(beacon_index).unwrap();
+                        path.push(beacon_index)
+                            .map_err(|_| NavigatorError::OutOfMemory)?;
                         // the node must have appeared while traversing the graph
                         parent_node = buffers.node_info[usize::from(beacon_index)].unwrap().1;
                     }
                 }
             }
         } else {
-            return Err(());
+            return Err(NavigatorError::NavigationImpossible);
         }
     }
     Ok(())

@@ -1,5 +1,5 @@
 use core::future::Future;
-use core::ops::{Add, AddAssign, Sub};
+use core::ops::{Add, AddAssign, Div, Sub};
 use core::pin::Pin;
 use core::task::{Context, Poll};
 use core::write;
@@ -39,6 +39,22 @@ impl Duration {
 
     pub fn as_ticks(&self) -> u32 {
         self.0
+    }
+
+    pub fn as_secs_floor(&self) -> u32 {
+        self.0.div(64_000)
+    }
+
+    pub fn as_secs_ceil(&self) -> u32 {
+        self.0.div_ceil(64_000)
+    }
+
+    pub fn as_millis_ceil(&self) -> u32 {
+        self.0.div_ceil(64)
+    }
+
+    pub fn as_millis_floor(&self) -> u32 {
+        self.0.div(64)
     }
 }
 

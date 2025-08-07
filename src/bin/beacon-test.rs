@@ -4,18 +4,20 @@
 #![test_runner(test_kartoffel::runner)]
 #![feature(iter_next_chunk)]
 
-use async_kartoffel::{println, random_seed, Bot, Direction, Rotation, Vec2, D3, D7 as DRadar};
-use embassy_executor::{task, Executor};
-use example_kartoffels::{
-    beacon_info, beacons, get_global_pos, get_navigator_info, make_navigator,
+use core::convert::identity;
+
+use async_kartoffel::{
+    print, println, random_seed, Bot, Direction, Duration, Instant, RadarScan, RadarSize, Rotation,
+    Vec2, D3, D7 as DRadar,
 };
-use heapless::Vec;
+use embassy_executor::{task, Executor};
+use example_kartoffels::{beacon_info, get_global_pos, get_navigator_info, make_navigator};
 use kartoffel_gps::{
     beacon::Navigator,
     gps::{MapSection, MapSectionTrait},
     GlobalPos,
 };
-use rand::{seq::IndexedRandom, SeedableRng};
+use rand::{rngs::SmallRng, seq::IndexedRandom, SeedableRng};
 use static_cell::StaticCell;
 
 #[no_mangle]
@@ -45,8 +47,10 @@ async fn main_task(mut bot: Bot) -> ! {
     let mut facing = bot.compass.direction().await;
     let mut pos: Option<GlobalPos> = None;
 
+    println!("creating navigator");
     let mut navigator = make_navigator();
 
+    println!("setting target");
     let target = GlobalPos::add_to_anchor(Vec2::new_global(4, -5));
 
     println!("beacon test, trying to navigate to {}", target);
@@ -77,26 +81,36 @@ async fn main_task(mut bot: Bot) -> ! {
             drop(scan);
             navigator.initialize(*pos, target);
             println!("starting computation");
-            navigator.compute();
-            if let Some(nodes) = navigator.get_path() {
-                println!("path");
-                for &node in nodes {
-                    println!("{}: {}", node, beacons()[usize::from(node)]);
-                }
+            navigator
+                .compute()
+                .unwrap_or_else(|err| println!("computation failed: {:?}", err));
 
+            if navigator.is_ready() {
                 println!("start navigating");
-                let mut path = Vec::<_, 32>::from_slice(nodes).unwrap();
-                while let Some(target_node) = path.pop() {
-                    let target_pos = beacons()[usize::from(target_node)];
-                    println!("target: {}", target_pos);
+                while !navigator.is_completed().unwrap() {
+                    {
+                        let scan = bot.radar.scan::<DRadar>().await;
+                        if let Some(new_pos) = get_global_pos(&MapSection::from_scan(&scan, facing))
+                        {
+                            if new_pos != *pos {
+                                println!("correction pos: {} -> {}", pos, new_pos);
+                                *pos = new_pos;
+                                if let Err(err) = navigator.move_start_to(*pos) {
+                                    println!("moving start failed: {:?}", err);
+                                }
+                            }
+                        }
+                    }
 
-                    while *pos != target_pos {
+                    let time_switch = Instant::now();
+                    println!("nav {}", navigator.get_start().unwrap());
+                    while (Instant::now() - time_switch).unwrap() < Duration::from_secs(5) {
                         let scan = bot.radar.scan::<D3>().await;
                         for dir in Direction::all() {
-                            if (target_pos - *pos).get(dir) > 0
+                            if navigator.is_dir_good(dir).is_some_and(identity)
                                 && scan
                                     .at(Vec2::from_direction(dir, 1).local(facing))
-                                    .is_some_and(|t| t.is_walkable_terrain())
+                                    .is_some_and(|t| t.is_empty())
                             {
                                 match dir - facing {
                                     Rotation::Id => {}
@@ -116,73 +130,96 @@ async fn main_task(mut bot: Bot) -> ! {
                                     }
                                 }
                                 bot.motor.step_fw().await;
+                                print!(".");
                                 *pos += Vec2::new_front(1).global(facing);
+                                if let Err(err) = navigator.move_start_to(*pos) {
+                                    println!("moving start failed: {:?}", err);
+                                }
                                 break;
                             }
                         }
                     }
-                }
-
-                let target_pos = target;
-                println!("target: {}", target_pos);
-
-                while *pos != target_pos {
-                    let scan = bot.radar.scan::<D3>().await;
-                    for dir in Direction::all() {
-                        if (target_pos - *pos).get(dir) > 0
-                            && scan
-                                .at(Vec2::from_direction(dir, 1).local(facing))
-                                .is_some_and(|t| t.is_walkable_terrain())
-                        {
-                            while facing != dir {
-                                bot.motor.turn_right().await;
-                                facing += Rotation::Right;
+                    println!("random {}", navigator.get_start().unwrap());
+                    while (Instant::now() - time_switch).unwrap() < Duration::from_secs(10) {
+                        let scan = bot.radar.scan::<D3>().await;
+                        let dir = random_direction(scan, &mut rng, facing);
+                        if let Some(dir) = dir {
+                            match dir - facing {
+                                Rotation::Id => {}
+                                Rotation::Left => {
+                                    bot.motor.turn_left().await;
+                                    facing += Rotation::Left;
+                                }
+                                Rotation::Right => {
+                                    bot.motor.turn_right().await;
+                                    facing += Rotation::Right;
+                                }
+                                Rotation::Inverse => {
+                                    bot.motor.turn_right().await;
+                                    bot.motor.turn_right().await;
+                                    facing += Rotation::Inverse;
+                                }
                             }
                             bot.motor.step_fw().await;
+                            print!(".");
                             *pos += Vec2::new_front(1).global(facing);
-                            break;
+                            if let Err(err) = navigator.move_start_to(*pos) {
+                                println!("moving start failed: {:?}", err);
+                            }
+                        } else {
+                            println!("we're stuck :(");
                         }
                     }
                 }
             } else {
                 println!("no path found");
             }
+
+            println!("done navigating");
+
             loop {}
             // TODO
         } else {
-            // do random step
-            let available_directions = Direction::all()
-                .into_iter()
-                .filter(|&dir| {
-                    scan.at(Vec2::from_rotation(dir - facing, 1))
-                        .unwrap()
-                        .is_walkable_terrain()
-                })
-                .collect::<heapless::Vec<Direction, 4>>();
-            let dir = available_directions.choose(&mut rng);
-            if let Some(&dir) = dir {
+            // do random step until pos is known
+            let dir = random_direction(scan, &mut rng, facing);
+            if let Some(dir) = dir {
                 match dir - facing {
-                    Rotation::Id => bot.motor.step_fw().await,
+                    Rotation::Id => {}
                     Rotation::Left => {
                         bot.motor.turn_left().await;
                         facing += Rotation::Left;
-                        bot.motor.step_fw().await;
                     }
                     Rotation::Right => {
                         bot.motor.turn_right().await;
                         facing += Rotation::Right;
-                        bot.motor.step_fw().await;
                     }
                     Rotation::Inverse => {
                         bot.motor.turn_right().await;
                         bot.motor.turn_right().await;
                         facing += Rotation::Inverse;
-                        bot.motor.step_fw().await;
                     }
                 }
+                bot.motor.step_fw().await;
+                print!(".");
             } else {
                 println!("we're stuck :(");
             }
         }
     }
+}
+
+fn random_direction<D: RadarSize>(
+    scan: RadarScan<D>,
+    rng: &mut SmallRng,
+    facing: Direction,
+) -> Option<Direction> {
+    let available_directions = Direction::all()
+        .into_iter()
+        .filter(|&dir| {
+            scan.at(Vec2::from_rotation(dir - facing, 1))
+                .unwrap()
+                .is_empty()
+        })
+        .collect::<heapless::Vec<Direction, 4>>();
+    available_directions.choose(rng).map(|dir| *dir)
 }

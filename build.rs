@@ -26,7 +26,7 @@ fn main() {
 
     add_true_map(file, map);
     add_gps::<MapSection<7>>(file, map);
-    add_beacons(file, map, 4);
+    add_beacons(file, map, 6);
 }
 
 fn add_true_map(file: &mut BufWriter<impl Write>, map: &Map) {

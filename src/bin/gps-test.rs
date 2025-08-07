@@ -7,10 +7,7 @@
 use async_kartoffel::{println, Bot, Instant, Rotation, Vec2, D7 as DRadar};
 use embassy_executor::{task, Executor};
 use example_kartoffels::{get_global_pos, global_pos_entries};
-use kartoffel_gps::{
-    gps::{MapSection, MapSectionTrait},
-    GlobalPos,
-};
+use kartoffel_gps::gps::{MapSection, MapSectionTrait};
 use static_cell::StaticCell;
 
 #[no_mangle]

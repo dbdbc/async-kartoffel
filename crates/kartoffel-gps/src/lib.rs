@@ -4,6 +4,8 @@
 #![cfg_attr(feature = "test-kartoffel", reexport_test_harness_main = "test_main")]
 #![cfg_attr(feature = "test-kartoffel", test_runner(test_kartoffel::runner))]
 
+extern crate alloc;
+
 use async_kartoffel::Position;
 use pos::GpsAnchor;
 

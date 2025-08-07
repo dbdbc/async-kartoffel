@@ -4,21 +4,18 @@
 #![test_runner(test_kartoffel::runner)]
 #![feature(iter_next_chunk)]
 
-use async_kartoffel::{
-    println, random_seed, Bot, Direction, Instant, Rotation, Timer, Vec2, D3, D7 as DRadar,
-};
+use async_kartoffel::{println, random_seed, Bot, Direction, Rotation, Vec2, D3, D7 as DRadar};
 use embassy_executor::{task, Executor};
 use example_kartoffels::{
-    beacon_graph, beacon_info, beacons, get_global_pos, get_navigator_info, global_pos_entries,
-    make_navigator, map,
+    beacon_info, beacons, get_global_pos, get_navigator_info, make_navigator,
 };
 use heapless::Vec;
 use kartoffel_gps::{
-    beacon::{self, Navigator},
+    beacon::Navigator,
     gps::{MapSection, MapSectionTrait},
     GlobalPos,
 };
-use rand::{distr, seq::IndexedRandom, Rng, SeedableRng};
+use rand::{seq::IndexedRandom, SeedableRng};
 use static_cell::StaticCell;
 
 #[no_mangle]
@@ -46,11 +43,11 @@ async fn main_task(mut bot: Bot) -> ! {
     };
 
     let mut facing = bot.compass.direction().await;
-    let mut pos = None;
+    let mut pos: Option<GlobalPos> = None;
 
     let mut navigator = make_navigator();
 
-    let target = GlobalPos::add_to_anchor(Vec2::new_global(64, -46));
+    let target = GlobalPos::add_to_anchor(Vec2::new_global(4, -5));
 
     println!("beacon test, trying to navigate to {}", target);
     println!("{:?}", beacon_info());
@@ -81,24 +78,11 @@ async fn main_task(mut bot: Bot) -> ! {
             navigator.initialize(*pos, target);
             println!("starting computation");
             navigator.compute();
-            if let Some(nodes) = navigator.get_entry_nodes() {
-                println!("entry");
-                for &node in nodes {
-                    println!("{}: {}", node, beacons()[usize::from(node)]);
-                }
-            }
-            if let Some(nodes) = navigator.get_exit_nodes() {
-                println!("exit");
-                for &node in nodes {
-                    println!("{}: {}", node, beacons()[usize::from(node)]);
-                }
-            }
             if let Some(nodes) = navigator.get_path() {
                 println!("path");
                 for &node in nodes {
                     println!("{}: {}", node, beacons()[usize::from(node)]);
                 }
-                Timer::after_secs(1).wait_blocking();
 
                 println!("start navigating");
                 let mut path = Vec::<_, 32>::from_slice(nodes).unwrap();
@@ -114,9 +98,22 @@ async fn main_task(mut bot: Bot) -> ! {
                                     .at(Vec2::from_direction(dir, 1).local(facing))
                                     .is_some_and(|t| t.is_walkable_terrain())
                             {
-                                while facing != dir {
-                                    bot.motor.turn_right().await;
-                                    facing += Rotation::Right;
+                                match dir - facing {
+                                    Rotation::Id => {}
+                                    Rotation::Left => {
+                                        bot.motor.turn_left().await;
+                                        facing += Rotation::Left;
+                                    }
+                                    Rotation::Right => {
+                                        bot.motor.turn_right().await;
+                                        facing += Rotation::Right;
+                                    }
+                                    Rotation::Inverse => {
+                                        for _ in 0..2 {
+                                            bot.motor.turn_right().await;
+                                            facing += Rotation::Right;
+                                        }
+                                    }
                                 }
                                 bot.motor.step_fw().await;
                                 *pos += Vec2::new_front(1).global(facing);

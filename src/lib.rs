@@ -1,5 +1,7 @@
 #![no_std]
 
+extern crate alloc;
+
 use async_kartoffel::Vec2;
 use kartoffel_gps::{
     beacon::{BeaconInfo, Navigator, NavigatorImpl},
@@ -46,11 +48,10 @@ pub fn map() -> &'static impl TrueMap {
     &TRUE_MAP
 }
 
-pub fn get_navigator_info() -> (usize, usize, usize, usize, usize) {
+pub fn get_navigator_info() -> (usize, usize, usize, usize) {
     (
         NAV_MAX_PATH_LEN,
-        NAV_MAX_ENTRY,
-        NAV_MAX_EXIT,
+        NAV_MAX_ENTRY_EXIT,
         NAV_TRIV_BUFFER,
         NAV_NODE_BUFFER,
     )
@@ -59,8 +60,7 @@ pub fn get_navigator_info() -> (usize, usize, usize, usize, usize) {
 pub fn make_navigator() -> impl Navigator {
     NavigatorImpl::<
         NAV_MAX_PATH_LEN,
-        NAV_MAX_ENTRY,
-        NAV_MAX_EXIT,
+        NAV_MAX_ENTRY_EXIT,
         NAV_TRIV_BUFFER,
         NAV_NODE_BUFFER,
         _,

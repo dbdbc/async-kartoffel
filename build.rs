@@ -1,6 +1,7 @@
 use std::env;
 use std::fs::File;
 use std::io::{BufWriter, Write};
+use std::ops::Div;
 use std::path::Path;
 
 use kartoffel_gps::gps::{MapSection, MapSectionTrait};
@@ -25,12 +26,12 @@ fn main() {
 
     add_true_map(file, map);
     add_gps::<MapSection<7>>(file, map);
-    add_beacons(file, map, 12);
+    add_beacons(file, map, 4);
 }
 
 fn add_true_map(file: &mut BufWriter<impl Write>, map: &Map) {
     let builder = map.builder();
-    write!(
+    writeln!(
         file,
         "const TRUE_MAP: {} = {};\n",
         builder.type_string(),
@@ -62,39 +63,38 @@ fn add_beacons(file: &mut BufWriter<impl Write>, map: &Map, max_beacon_dist: u32
 
     let builder_graph = ConstSparseGraphBuilder::from_graph(&beacon_graph);
     let builder_pos = ArrayBuilder(beacon_positions.vec());
-    write!(
+    writeln!(
         file,
         "const BEACON_GRAPH: {} = {};\n",
         builder_graph.type_string(),
         builder_graph
     )
     .unwrap();
-    write!(
+    writeln!(
         file,
         "const BEACON_POSITIONS: {} = {};\n",
         builder_pos.type_string(),
         builder_pos
     )
     .unwrap();
-    write!(
+    writeln!(
         file,
         "const BEACON_INFO: ::kartoffel_gps::beacon::BeaconInfo = {:?};\n",
         beacon_info
     )
     .unwrap();
-    write!(
+    writeln!(
         file,
-        "const NAV_MAX_PATH_LEN: usize = {};\n
-        const NAV_MAX_ENTRY: usize = {};\n
-        const NAV_MAX_EXIT: usize = {};\n
-        const NAV_TRIV_BUFFER: usize = {};\n
-        const NAV_NODE_BUFFER: usize = {};\n",
+        "const NAV_MAX_PATH_LEN: usize = {};
+const NAV_MAX_ENTRY_EXIT: usize = {};
+const NAV_TRIV_BUFFER: usize = {};
+const NAV_NODE_BUFFER: usize = {};\n",
         beacon_info.max_path_length.next_power_of_two(),
-        beacon_info.max_beacons_entry.next_power_of_two(),
-        beacon_info.max_beacons_exit.next_power_of_two(),
-        (beacon_info.max_beacon_dist + 2)
-            .div_ceil(2)
+        beacon_info
+            .max_beacons_entry
+            .max(beacon_info.max_beacons_exit)
             .next_power_of_two(),
+        (beacon_info.max_beacon_dist + 2).div(2),
         (beacon_info.n_beacons + 2).next_power_of_two(),
     )
     .unwrap();
@@ -113,10 +113,11 @@ fn add_beacons(file: &mut BufWriter<impl Write>, map: &Map, max_beacon_dist: u32
         let col = pos.sub_anchor().east() as usize;
         map_chars[row][col] = '*';
     }
-    writeln!(file, "\n // beacons").unwrap();
+    writeln!(file, "// beacons").unwrap();
     for row in map_chars {
         writeln!(file, "// {}", row.into_iter().collect::<String>()).unwrap();
     }
+    writeln!(file, "").unwrap();
 }
 
 fn add_gps<T: MapSectionTrait>(file: &mut BufWriter<impl Write>, map: &Map) {
@@ -142,7 +143,7 @@ fn add_gps<T: MapSectionTrait>(file: &mut BufWriter<impl Write>, map: &Map) {
         );
     }
 
-    write!(
+    writeln!(
         file,
         "static UNIQUE_CHUNKS: ::phf::Map<{}, (u8, u8)> = {};\n",
         <T>::compressed_type(),

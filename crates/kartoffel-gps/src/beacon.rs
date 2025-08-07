@@ -1,10 +1,8 @@
 use core::marker::PhantomData;
 
+use alloc::boxed::Box;
 use async_algorithm::{DistanceManhattan, DistanceMeasure, DistanceMin};
-use async_kartoffel::{Direction, Timer, Vec2};
-
-#[cfg(any(target_arch = "riscv32"))]
-use async_kartoffel::println;
+use async_kartoffel::{Direction, Vec2};
 
 use heapless::{binary_heap::Min, BinaryHeap, Vec};
 
@@ -29,12 +27,15 @@ pub struct BeaconInfo {
 
 pub trait Navigator {
     fn initialize(&mut self, start: GlobalPos, destination: GlobalPos);
+    fn reset(&mut self);
 
     fn compute(&mut self);
 
-    fn get_entry_nodes(&self) -> Option<&[u16]>;
-    fn get_exit_nodes(&self) -> Option<&[u16]>;
     fn get_path(&self) -> Option<&[u16]>;
+
+    fn move_start_to(&mut self, new_start: GlobalPos) -> Result<(), ()>;
+    fn is_dir_good(&self, dir: Direction) -> Option<bool>;
+    fn good_dirs(&self) -> Option<Vec<Direction, 2>>;
 }
 
 pub struct NavigationImpossible;
@@ -75,10 +76,30 @@ enum Node {
     Destination,
 }
 
+// Buffers that can be used for computations
+pub struct NavigatorBuffers<const MAX_ENTRY_EXIT: usize, const NODE_BUFFER: usize> {
+    entry_nodes: Box<Vec<u16, MAX_ENTRY_EXIT>>,
+    exit_nodes: Box<Vec<u16, MAX_ENTRY_EXIT>>,
+    active: Box<BinaryHeap<NavActiveEntry, Min, NODE_BUFFER>>,
+    node_info: Box<[Option<(u16, Node)>; NODE_BUFFER]>,
+}
+
+impl<const MAX_ENTRY_EXIT: usize, const NODE_BUFFER: usize> Default
+    for NavigatorBuffers<MAX_ENTRY_EXIT, NODE_BUFFER>
+{
+    fn default() -> Self {
+        Self {
+            entry_nodes: Default::default(),
+            exit_nodes: Default::default(),
+            active: Default::default(),
+            node_info: Box::new([None; NODE_BUFFER]),
+        }
+    }
+}
+
 pub struct NavigatorImpl<
     const MAX_PATH_LEN: usize,
-    const MAX_ENTRY: usize,
-    const MAX_EXIT: usize,
+    const MAX_ENTRY_EXIT: usize,
     const TRIV_BUFFER: usize,
     const NODE_BUFFER: usize,
     T: TrueMap + 'static,
@@ -90,263 +111,48 @@ pub struct NavigatorImpl<
     beacons: &'static [GlobalPos],
     max_beacon_dist: u16,
 
-    // computation state
+    // config
     start: Option<GlobalPos>,
     destination: Option<GlobalPos>,
 
-    entry_nodes: Option<Vec<u16, MAX_ENTRY>>,
-    exit_nodes: Option<Vec<u16, MAX_EXIT>>,
-
+    // computation result
     path: Option<Vec<u16, MAX_PATH_LEN>>, // path in reverse order
 
     // intermediate buffers
-    active: BinaryHeap<NavActiveEntry, Min, NODE_BUFFER>,
-    node_info: [Option<(u16, Node)>; NODE_BUFFER],
-    node_info_destination: Option<(u16, Node)>,
+    buffers: NavigatorBuffers<MAX_ENTRY_EXIT, NODE_BUFFER>,
 
     _phantom: PhantomData<[(); TRIV_BUFFER]>,
 }
 
 impl<
         const MAX_PATH_LEN: usize,
-        const MAX_ENTRY: usize,
-        const MAX_EXIT: usize,
+        const MAX_ENTRY_EXIT: usize,
         const TRIV_BUFFER: usize,
         const NODE_BUFFER: usize,
         T: TrueMap,
         G: Graph,
-    > Navigator
-    for NavigatorImpl<MAX_PATH_LEN, MAX_ENTRY, MAX_EXIT, TRIV_BUFFER, NODE_BUFFER, T, G>
+    > Navigator for NavigatorImpl<MAX_PATH_LEN, MAX_ENTRY_EXIT, TRIV_BUFFER, NODE_BUFFER, T, G>
 {
     fn initialize(&mut self, start: GlobalPos, destination: GlobalPos) {
         self.start = Some(start);
         self.destination = Some(destination);
-        self.entry_nodes = None;
-        self.exit_nodes = None;
         self.path = None;
-        self.active = BinaryHeap::new();
     }
 
     fn compute(&mut self) {
-        // clear intermediate state
-        self.active = BinaryHeap::new();
-        self.node_info = [None; NODE_BUFFER];
-        self.node_info_destination = None;
-
         if let (Some(start), Some(destination)) = (self.start, self.destination) {
-            // entry
-            self.entry_nodes = Some(
-                self.beacons
-                    .iter()
-                    .enumerate()
-                    .filter(|(_, &pos)| {
-                        DistanceManhattan::measure(pos - start) <= self.max_beacon_dist
-                    })
-                    .filter(|(_, &pos)| {
-                        is_navigation_trivial::<TRIV_BUFFER>(self.map, start, pos).unwrap()
-                    }) // TODO unwrap error
-                    .map(|(index, _)| u16::try_from(index).unwrap())
-                    .collect(),
-            );
-
-            // exit
-            self.exit_nodes = Some(
-                self.beacons
-                    .iter()
-                    .enumerate()
-                    .filter(|(_, &pos)| {
-                        DistanceManhattan::measure(destination - pos) <= self.max_beacon_dist
-                    })
-                    .filter(|(_, &pos)| {
-                        is_navigation_trivial::<TRIV_BUFFER>(self.map, pos, destination).unwrap()
-                    }) // TODO unwrap
-                    .map(|(index, _)| u16::try_from(index).unwrap())
-                    .collect(),
-            );
-
-            let (Some(entry_nodes), Some(exit_nodes)) = (&self.entry_nodes, &self.exit_nodes)
-            else {
-                unreachable!()
-            };
-
-            // graph initialization
-            for &node_index in entry_nodes {
-                let pos = self.beacons[usize::from(node_index)];
-                let past_cost = DistanceManhattan::measure(pos - start);
-
-                #[cfg(any(target_arch = "riscv32"))]
-                println!("push init {:?}", Node::Beacon(node_index));
-                Timer::after_millis(00).wait_blocking();
-
-                self.active
-                    .push(NavActiveEntry {
-                        estimated_cost: past_cost + DistanceManhattan::measure(destination - pos),
-                        past_cost,
-                        node: Node::Beacon(node_index),
-                    })
-                    .unwrap();
-                self.node_info[usize::from(node_index)] = Some((past_cost, Node::Start));
-            }
-
-            // graph traversal
-            'main_loop: while let Some(NavActiveEntry {
-                estimated_cost: _,
-                past_cost,
-                node,
-            }) = self.active.pop()
-            {
-                #[cfg(any(target_arch = "riscv32"))]
-                println!("pop       {:?}", node);
-                Timer::after_millis(00).wait_blocking();
-
-                match node {
-                    Node::Start => unreachable!("start is never added to the active nodes"),
-                    Node::Destination => {
-                        #[cfg(any(target_arch = "riscv32"))]
-                        println!("destination reached");
-                        Timer::after_millis(00).wait_blocking();
-
-                        break 'main_loop;
-                    }
-                    Node::Beacon(node_index) => {
-                        let pos = self.beacons[usize::from(node_index)];
-
-                        // this check ensures that nodes that were added multiple time are only
-                        // processed once and might not be necessary
-                        if self.node_info[usize::from(node_index)]
-                            .is_none_or(|(past_cost_ni, _)| u16::from(past_cost_ni) == past_cost)
-                        {
-                            // neighbor is destination node
-                            if exit_nodes.iter().any(|&exit_node| exit_node == node_index) {
-                                #[cfg(any(target_arch = "riscv32"))]
-                                println!("XXXX exit node reached");
-                                Timer::after_millis(00).wait_blocking();
-
-                                let total_cost =
-                                    past_cost + DistanceManhattan::measure(destination - pos);
-                                if let Some((total_cost_old, parent)) =
-                                    &mut self.node_info_destination
-                                {
-                                    if total_cost < *total_cost_old {
-                                        *total_cost_old = total_cost;
-                                        *parent = node;
-                                    }
-
-                                    #[cfg(any(target_arch = "riscv32"))]
-                                    println!("push dest {:?}", Node::Destination);
-                                    Timer::after_millis(00).wait_blocking();
-
-                                    self.active
-                                        .push(NavActiveEntry {
-                                            estimated_cost: total_cost,
-                                            past_cost: total_cost,
-                                            node: Node::Destination,
-                                        })
-                                        .unwrap();
-                                } else {
-                                    self.node_info_destination = Some((total_cost, node));
-                                    self.active
-                                        .push(NavActiveEntry {
-                                            estimated_cost: total_cost,
-                                            past_cost: total_cost,
-                                            node: Node::Destination,
-                                        })
-                                        .unwrap();
-
-                                    #[cfg(any(target_arch = "riscv32"))]
-                                    println!("push new  {:?}", Node::Destination);
-                                    Timer::after_millis(00).wait_blocking();
-                                }
-                            }
-
-                            // neighbors are beacon nodes
-                            for &neighbor in self.graph.after(node_index) {
-                                let pos_neighbor = self.beacons[usize::from(neighbor)];
-                                let past_cost_neighbor =
-                                    past_cost + DistanceManhattan::measure(pos_neighbor - pos);
-                                if let Some((past_cost_old, parent)) =
-                                    &mut self.node_info[usize::from(neighbor)]
-                                {
-                                    if past_cost_neighbor < *past_cost_old {
-                                        *past_cost_old = past_cost_neighbor;
-                                        *parent = node;
-                                        self.active
-                                            .push(NavActiveEntry {
-                                                estimated_cost: past_cost_neighbor
-                                                    + DistanceManhattan::measure(
-                                                        destination - pos_neighbor,
-                                                    ),
-                                                past_cost: past_cost_neighbor,
-                                                node: Node::Beacon(neighbor),
-                                            })
-                                            .unwrap();
-
-                                        #[cfg(any(target_arch = "riscv32"))]
-                                        println!("push over {:?}", Node::Beacon(neighbor));
-                                        Timer::after_millis(0).wait_blocking();
-                                    }
-                                } else {
-                                    self.node_info[usize::from(neighbor)] =
-                                        Some((past_cost_neighbor, node));
-                                    self.active
-                                        .push(NavActiveEntry {
-                                            estimated_cost: past_cost_neighbor
-                                                + DistanceManhattan::measure(
-                                                    destination - pos_neighbor,
-                                                ),
-                                            past_cost: past_cost_neighbor,
-                                            node: Node::Beacon(neighbor),
-                                        })
-                                        .unwrap();
-
-                                    #[cfg(any(target_arch = "riscv32"))]
-                                    println!("push new  {:?}", Node::Beacon(neighbor));
-                                    Timer::after_millis(0).wait_blocking();
-                                }
-                            }
-                        }
-                    }
-                };
-            }
-
-            #[cfg(any(target_arch = "riscv32"))]
-            println!("remaining in active: {}", self.active.len());
-            Timer::after_millis(00).wait_blocking();
-
-            // path calculation
-            if let Some((_cost, mut parent_node)) = self.node_info_destination {
-                self.path = Some(Vec::new());
-                let Some(path) = &mut self.path else {
-                    unreachable!()
-                };
-                loop {
-                    match parent_node {
-                        Node::Start => break,
-                        Node::Destination => unreachable!(),
-                        Node::Beacon(beacon_index) => {
-                            path.push(beacon_index).unwrap();
-                            // the node must have appeared while traversing the graph
-                            parent_node = self.node_info[usize::from(beacon_index)].unwrap().1;
-                        }
-                    }
-                }
-            } else {
-                self.path = None;
-            }
-        }
-    }
-
-    fn get_entry_nodes(&self) -> Option<&[u16]> {
-        match &self.entry_nodes {
-            None => None,
-            Some(n) => Some(n.as_slice()),
-        }
-    }
-
-    fn get_exit_nodes(&self) -> Option<&[u16]> {
-        match &self.exit_nodes {
-            None => None,
-            Some(n) => Some(n.as_slice()),
+            self.path = Some(Vec::new());
+            compute::<MAX_PATH_LEN, MAX_ENTRY_EXIT, TRIV_BUFFER, NODE_BUFFER>(
+                start,
+                destination,
+                &mut self.buffers,
+                self.map,
+                self.graph,
+                self.beacons,
+                self.max_beacon_dist,
+                &mut self.path.as_mut().unwrap(), // unwrap: we just created path
+            )
+            .unwrap(); // TODO can fail
         }
     }
 
@@ -356,17 +162,132 @@ impl<
             Some(n) => Some(n.as_slice()),
         }
     }
+
+    fn move_start_to(&mut self, new_start: GlobalPos) -> Result<(), ()> {
+        let good_dirs = self.good_dirs().ok_or(())?;
+
+        let path = self.path.as_mut().ok_or(())?;
+        let old_start = self.start.as_mut().ok_or(())?;
+        let destination = self.destination.ok_or(())?;
+
+        // no movement
+        if new_start == *old_start {
+            return Ok(());
+        }
+
+        let movement = new_start - *old_start;
+        let movement_dirs = {
+            let mut v = Vec::<Direction, 2>::new();
+            match movement.get(Direction::East) {
+                ..0 => v.push(Direction::West).unwrap(),
+                0 => {}
+                1.. => v.push(Direction::East).unwrap(),
+            }
+            match movement.get(Direction::North) {
+                ..0 => v.push(Direction::South).unwrap(),
+                0 => {}
+                1.. => v.push(Direction::North).unwrap(),
+            }
+            v
+        };
+        let movement_steps = DistanceManhattan::measure(movement);
+
+        let target = if let Some(&node) = path.last() {
+            self.beacons[usize::from(node)]
+        } else {
+            destination
+        };
+
+        if new_start == target {
+            // reached target
+            _ = path.pop();
+        } else if movement_steps == 1 && good_dirs.contains(movement_dirs.get(0).unwrap()) {
+            // preferred case: single step in good dir, is really easy because of trivial
+            // navigation rules
+            *old_start = new_start;
+        } else {
+            // new calculation needed :( but to save cost, only to target
+            compute::<MAX_PATH_LEN, MAX_ENTRY_EXIT, TRIV_BUFFER, NODE_BUFFER>(
+                new_start,
+                target,
+                &mut self.buffers,
+                self.map,
+                self.graph,
+                self.beacons,
+                self.max_beacon_dist,
+                path,
+            )
+            .unwrap(); // TODO can fail
+                       // TODO path len can no grow over time
+        }
+        Ok(())
+    }
+
+    // checks if the next tile in dir is walkable, and if this is the right direction
+    fn is_dir_good(&self, dir: Direction) -> Option<bool> {
+        let path = self.path.as_ref()?;
+        let start = self.start?;
+        let destination = self.destination?;
+
+        let target = if let Some(&node) = path.last() {
+            self.beacons[usize::from(node)]
+        } else {
+            destination
+        };
+
+        Some((target - start).get(dir) > 0 && self.map.get(start + Vec2::from_direction(dir, 1)))
+    }
+
+    fn good_dirs(&self) -> Option<Vec<Direction, 2>> {
+        let path = self.path.as_ref()?;
+        let start = self.start?;
+        let destination = self.destination?;
+
+        let target = if let Some(&node) = path.last() {
+            self.beacons[usize::from(node)]
+        } else {
+            destination
+        };
+
+        let movement = target - start;
+
+        let mut v = Vec::<Direction, 2>::new();
+
+        let mut check_and_add = |dir: Direction| {
+            if self.map.get(start + Vec2::from_direction(dir, 1)) {
+                v.push(dir).unwrap();
+            }
+        };
+
+        match movement.get(Direction::East) {
+            ..0 => check_and_add(Direction::West),
+            0 => {}
+            1.. => check_and_add(Direction::East),
+        }
+        match movement.get(Direction::North) {
+            ..0 => check_and_add(Direction::South),
+            0 => {}
+            1.. => check_and_add(Direction::North),
+        }
+
+        Some(v)
+    }
+
+    fn reset(&mut self) {
+        self.start = None;
+        self.destination = None;
+        self.path = None;
+    }
 }
 
 impl<
         const MAX_PATH_LEN: usize,
-        const MAX_ENTRY: usize,
-        const MAX_EXIT: usize,
+        const MAX_ENTRY_EXIT: usize,
         const TRIV_BUFFER: usize,
         const NODE_BUFFER: usize,
         T: TrueMap,
         G: Graph,
-    > NavigatorImpl<MAX_PATH_LEN, MAX_ENTRY, MAX_EXIT, TRIV_BUFFER, NODE_BUFFER, T, G>
+    > NavigatorImpl<MAX_PATH_LEN, MAX_ENTRY_EXIT, TRIV_BUFFER, NODE_BUFFER, T, G>
 {
     pub fn new(
         map: &'static T,
@@ -380,37 +301,18 @@ impl<
             beacons,
             max_beacon_dist,
             start: None,
-            entry_nodes: None,
             destination: None,
-            exit_nodes: None,
             path: None,
-            active: BinaryHeap::new(),
-            node_info: [None; NODE_BUFFER],
-            node_info_destination: None,
+            buffers: NavigatorBuffers::default(),
             _phantom: Default::default(),
         }
-    }
-
-    pub fn clear(&mut self) {
-        todo!()
-    }
-
-    pub fn update_start(&mut self, _start: GlobalPos) {
-        todo!()
-    }
-
-    // TODO is it beneficial to keep this vs reinitializing
-    pub fn update_destination(&mut self, _destination: GlobalPos) {
-        todo!()
-    }
-
-    pub fn is_good_dir(&self, _direction: Direction) -> Option<bool> {
-        todo!()
     }
 }
 
 /// assumes that start is walkable
 /// assumes distances to be small enough to fit in i16
+/// BUFFER_SIZE needs to be at least (dist_manhattan + 2).div_floor(2)
+/// this functions makes no assumptions about BUFFER_SIZE, but returns an Err
 fn is_navigation_trivial<const BUFFER_SIZE: usize>(
     map: &impl TrueMap,
     start: GlobalPos,
@@ -451,18 +353,9 @@ fn is_navigation_trivial<const BUFFER_SIZE: usize>(
     } else {
         let max_dir_0 = u16::try_from(vector.get(dirs[0])).unwrap();
         let max_dir_1 = dist_man - max_dir_0;
-        // let (dir_smaller, dir_larger) = {
-        //     let dist_d0 = vector.get(dirs[0]);
-        //     let dist_d1 = vector.get(dirs[1]);
-        //     if dist_d0 >= dist_d1 {
-        //         (dirs[0], dirs[1])
-        //     } else {
-        //         (dirs[1], dirs[0])
-        //     }
-        // };
 
         // out of bounds
-        if usize::try_from(dist_min + 1).unwrap() >= BUFFER_SIZE {
+        if usize::try_from(dist_min + 1).unwrap() > BUFFER_SIZE {
             return Err(());
         };
 
@@ -531,6 +424,188 @@ fn is_navigation_trivial<const BUFFER_SIZE: usize>(
         }
         Ok(true)
     }
+}
+
+fn compute<
+    const MAX_PATH_LEN: usize,
+    const MAX_ENTRY_EXIT: usize,
+    const TRIV_BUFFER: usize,
+    const NODE_BUFFER: usize,
+>(
+    start: GlobalPos,
+    destination: GlobalPos,
+
+    buffers: &mut NavigatorBuffers<MAX_ENTRY_EXIT, NODE_BUFFER>,
+
+    map: &impl TrueMap,
+    graph: &impl Graph,
+    beacons: &[GlobalPos],
+    max_beacon_dist: u16,
+
+    path: &mut Vec<u16, MAX_PATH_LEN>, // path in reverse order, calculation is appended, TODO can
+                                       // no longer prevent overflow errors reliably now
+) -> Result<(), ()> {
+    // clear intermediate state
+    *buffers = Default::default();
+    let mut node_info_destination: Option<(u16, Node)> = None;
+
+    // entry
+    *buffers.entry_nodes = beacons
+        .iter()
+        .enumerate()
+        .filter(|(_, &pos)| DistanceManhattan::measure(pos - start) <= max_beacon_dist)
+        .filter(|(_, &pos)| is_navigation_trivial::<TRIV_BUFFER>(map, start, pos).unwrap()) // TODO unwrap error
+        .map(|(index, _)| u16::try_from(index).unwrap())
+        .collect();
+
+    // exit
+    *buffers.exit_nodes = beacons
+        .iter()
+        .enumerate()
+        .filter(|(_, &pos)| DistanceManhattan::measure(destination - pos) <= max_beacon_dist)
+        .filter(|(_, &pos)| is_navigation_trivial::<TRIV_BUFFER>(map, pos, destination).unwrap()) // TODO unwrap
+        .map(|(index, _)| u16::try_from(index).unwrap())
+        .collect();
+
+    if start == destination
+        || (DistanceManhattan::measure(destination - start) <= max_beacon_dist
+            && is_navigation_trivial::<TRIV_BUFFER>(map, start, destination).unwrap())
+    {
+        // nothing to add to path
+    } else {
+        // graph initialization
+        for &node_index in &*buffers.entry_nodes {
+            let pos = beacons[usize::from(node_index)];
+            let past_cost = DistanceManhattan::measure(pos - start);
+
+            buffers
+                .active
+                .push(NavActiveEntry {
+                    estimated_cost: past_cost + DistanceManhattan::measure(destination - pos),
+                    past_cost,
+                    node: Node::Beacon(node_index),
+                })
+                .unwrap();
+            buffers.node_info[usize::from(node_index)] = Some((past_cost, Node::Start));
+        }
+
+        // graph traversal
+        'main_loop: while let Some(NavActiveEntry {
+            estimated_cost: _,
+            past_cost,
+            node,
+        }) = buffers.active.pop()
+        {
+            match node {
+                Node::Start => unreachable!("start is never added to the active nodes"),
+                Node::Destination => {
+                    break 'main_loop;
+                }
+                Node::Beacon(node_index) => {
+                    let pos = beacons[usize::from(node_index)];
+
+                    // this check ensures that nodes that were added multiple time are only
+                    // processed once and might not be necessary
+                    if buffers.node_info[usize::from(node_index)]
+                        .is_none_or(|(past_cost_ni, _)| u16::from(past_cost_ni) == past_cost)
+                    {
+                        // neighbor is destination node
+                        if buffers
+                            .exit_nodes
+                            .iter()
+                            .any(|&exit_node| exit_node == node_index)
+                        {
+                            let total_cost =
+                                past_cost + DistanceManhattan::measure(destination - pos);
+                            if let Some((total_cost_old, parent)) = &mut node_info_destination {
+                                if total_cost < *total_cost_old {
+                                    *total_cost_old = total_cost;
+                                    *parent = node;
+                                }
+
+                                buffers
+                                    .active
+                                    .push(NavActiveEntry {
+                                        estimated_cost: total_cost,
+                                        past_cost: total_cost,
+                                        node: Node::Destination,
+                                    })
+                                    .unwrap();
+                            } else {
+                                node_info_destination = Some((total_cost, node));
+                                buffers
+                                    .active
+                                    .push(NavActiveEntry {
+                                        estimated_cost: total_cost,
+                                        past_cost: total_cost,
+                                        node: Node::Destination,
+                                    })
+                                    .unwrap();
+                            }
+                        }
+
+                        // neighbors are beacon nodes
+                        for &neighbor in graph.after(node_index) {
+                            let pos_neighbor = beacons[usize::from(neighbor)];
+                            let past_cost_neighbor =
+                                past_cost + DistanceManhattan::measure(pos_neighbor - pos);
+                            if let Some((past_cost_old, parent)) =
+                                &mut buffers.node_info[usize::from(neighbor)]
+                            {
+                                if past_cost_neighbor < *past_cost_old {
+                                    *past_cost_old = past_cost_neighbor;
+                                    *parent = node;
+                                    buffers
+                                        .active
+                                        .push(NavActiveEntry {
+                                            estimated_cost: past_cost_neighbor
+                                                + DistanceManhattan::measure(
+                                                    destination - pos_neighbor,
+                                                ),
+                                            past_cost: past_cost_neighbor,
+                                            node: Node::Beacon(neighbor),
+                                        })
+                                        .unwrap();
+                                }
+                            } else {
+                                buffers.node_info[usize::from(neighbor)] =
+                                    Some((past_cost_neighbor, node));
+                                buffers
+                                    .active
+                                    .push(NavActiveEntry {
+                                        estimated_cost: past_cost_neighbor
+                                            + DistanceManhattan::measure(
+                                                destination - pos_neighbor,
+                                            ),
+                                        past_cost: past_cost_neighbor,
+                                        node: Node::Beacon(neighbor),
+                                    })
+                                    .unwrap();
+                            }
+                        }
+                    }
+                }
+            };
+        }
+
+        // path calculation
+        if let Some((_cost, mut parent_node)) = node_info_destination {
+            loop {
+                match parent_node {
+                    Node::Start => break,
+                    Node::Destination => unreachable!(),
+                    Node::Beacon(beacon_index) => {
+                        path.push(beacon_index).unwrap();
+                        // the node must have appeared while traversing the graph
+                        parent_node = buffers.node_info[usize::from(beacon_index)].unwrap().1;
+                    }
+                }
+            }
+        } else {
+            return Err(());
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -845,7 +920,8 @@ mod tests {
             rng
         };
 
-        fn for_size<const WIDTH: usize, const HEIGHT: usize>(
+        // (max_dist + 2).div_ceil(2).next_power_of_two(),
+        fn for_size<const WIDTH: usize, const HEIGHT: usize, const BUFFER_SIZE: usize>(
             rng: &mut SmallRng,
             odds: (u16, u16),
         ) -> Result<(), TestError> {
@@ -891,7 +967,7 @@ mod tests {
                     _ => unreachable!(),
                 };
 
-                let triv_nav = is_navigation_trivial::<64>(&map, start, dest).unwrap();
+                let triv_nav = is_navigation_trivial::<BUFFER_SIZE>(&map, start, dest).unwrap();
 
                 if triv_nav {
                     println!("t {:?} {:?}", dir0, dir1);
@@ -927,15 +1003,15 @@ mod tests {
 
         for i in 0..100 {
             println!("\n{}", i);
-            for_size::<1, 5>(&mut rng, (4, 1))?;
-            for_size::<2, 5>(&mut rng, (4, 1))?;
-            for_size::<3, 5>(&mut rng, (4, 1))?;
-            for_size::<4, 5>(&mut rng, (4, 1))?;
-            for_size::<5, 5>(&mut rng, (4, 1))?;
-            for_size::<5, 4>(&mut rng, (4, 1))?;
-            for_size::<5, 3>(&mut rng, (4, 1))?;
-            for_size::<5, 2>(&mut rng, (4, 1))?;
-            for_size::<5, 1>(&mut rng, (4, 1))?;
+            for_size::<1, 5, 3>(&mut rng, (4, 1))?;
+            for_size::<2, 5, 3>(&mut rng, (4, 1))?;
+            for_size::<3, 5, 4>(&mut rng, (4, 1))?;
+            for_size::<4, 5, 4>(&mut rng, (4, 1))?;
+            for_size::<5, 5, 5>(&mut rng, (4, 1))?;
+            for_size::<5, 4, 4>(&mut rng, (4, 1))?;
+            for_size::<5, 3, 4>(&mut rng, (4, 1))?;
+            for_size::<5, 2, 3>(&mut rng, (4, 1))?;
+            for_size::<5, 1, 3>(&mut rng, (4, 1))?;
         }
 
         Ok(())

@@ -367,7 +367,7 @@ fn movement(
             (
                 // disincentivise backward with bot score due to cooldown cost
                 bot_eval
-                    + if movement == Some(MotorAction::StepBack) && bots.len() > 0 {
+                    + if movement == Some(MotorAction::StepBack) && !bots.is_empty() {
                         3
                     } else {
                         0

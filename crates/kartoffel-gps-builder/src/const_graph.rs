@@ -35,7 +35,7 @@ impl ConstSparseGraphBuilder {
         }
         builder
     }
-    pub fn add_node(&mut self, before: &Vec<u16>, after: &Vec<u16>) {
+    pub fn add_node(&mut self, before: &[u16], after: &[u16]) {
         assert!(is_sorted_deduplicated(before));
         assert!(is_sorted_deduplicated(after));
 
@@ -76,7 +76,7 @@ impl ConstSparseGraphBuilder {
         if self.nodes.len() > u16::MAX.into() {
             return false;
         }
-        return true;
+        true
     }
 }
 
@@ -93,13 +93,13 @@ impl Display for ConstSparseGraphBuilder {
             "::kartoffel_gps::const_graph::ConstSparseGraph {{\n    nodes: [\n"
         )?;
         for node in &self.nodes {
-            write!(f, "        {},\n", node)?;
+            writeln!(f, "        {},", node)?;
         }
         write!(f, "    ],\n    data: [")?;
         for d in &self.data {
             write!(f, "{}, ", d)?;
         }
-        write!(f, "],\n}}")?;
+        writeln!(f, "],}}")?;
         Ok(())
     }
 }

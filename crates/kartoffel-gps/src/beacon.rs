@@ -32,28 +32,53 @@ pub struct BeaconInfo {
     pub n_beacons: u32,
 }
 
+// TODO
+// states: Uninit {}
+//         Computing {start, dest}
+//         Failed {start, dest}
+//         Ready {start, dest, path}
+//         PartialReady {start, dest, path}: start has been moved to an invalid place
+// pub enum NavigatorReady {
+//     Ready,
+//     Partial,
+// }
+// pub enum NavigatorComputation {
+//     Computing,
+//     Failed,
+//     Ready {
+//         ready: NavigatorReady,
+//         path: Option<Vec<u16, MAX_PATH_LEN>>, // path in reverse order
+//     },
+// }
+// pub enum NavigatorState {
+//     Uninitialized,
+//     Initialized {
+//         start: GlobalPos,
+//         destination: GlobalPos,
+//         computation: NavigatorComputation,
+//     },
+// }
+
 pub trait Navigator {
-    fn initialize(&mut self, start: GlobalPos, destination: GlobalPos);
+    fn initialize(&mut self, start: GlobalPos, destination: GlobalPos); // Uninit -> Computing
 
-    fn reset(&mut self);
+    fn reset(&mut self); // any -> Uninit
 
-    fn get_start(&self) -> Option<GlobalPos>;
+    fn get_start(&self) -> Option<GlobalPos>; // Computing, Ready, PartialReady, Failed
 
-    fn get_destination(&self) -> Option<GlobalPos>;
+    fn get_destination(&self) -> Option<GlobalPos>; // Computing, Ready, PartialReady, Failed
 
-    fn compute(&mut self) -> Result<(), NavigatorError>;
+    fn compute(&mut self) -> Result<(), NavigatorError>; // Computing -> Failed, Ready
 
-    fn is_ready(&self) -> bool;
+    fn is_ready(&self) -> bool; // state == Ready
 
-    fn is_completed(&self) -> Option<bool>;
+    fn is_completed(&self) -> Option<bool>; // Ready
 
-    fn get_path(&self) -> Option<&[u16]>;
+    fn move_start_to(&mut self, new_start: GlobalPos) -> Result<(), NavigatorError>; // Ready, PartialReady -> Ready, PartialReady
 
-    fn move_start_to(&mut self, new_start: GlobalPos) -> Result<(), NavigatorError>;
+    fn is_dir_good(&self, dir: Direction) -> Option<bool>; // Ready
 
-    fn is_dir_good(&self, dir: Direction) -> Option<bool>;
-
-    fn good_dirs(&self) -> Option<Vec<Direction, 2>>;
+    fn good_dirs(&self) -> Option<Vec<Direction, 2>>; // Ready
 }
 
 // Ord derived implementation ensures desired `Min` behaviour for the priority queue
@@ -113,6 +138,25 @@ impl<const MAX_ENTRY_EXIT: usize, const NODE_BUFFER: usize> Default
     }
 }
 
+/// const navigator state
+pub struct NavigatorStatic<T: TrueMap + 'static, G: Graph + 'static> {
+    map: &'static T,
+    graph: &'static G,
+    beacons: &'static [GlobalPos],
+    max_beacon_dist: u16,
+}
+
+impl<T: TrueMap, G: Graph> Clone for NavigatorStatic<T, G> {
+    fn clone(&self) -> Self {
+        Self {
+            map: self.map,
+            graph: self.graph,
+            beacons: self.beacons,
+            max_beacon_dist: self.max_beacon_dist,
+        }
+    }
+}
+
 pub struct NavigatorImpl<
     const MAX_PATH_LEN: usize,
     const MAX_ENTRY_EXIT: usize,
@@ -121,11 +165,12 @@ pub struct NavigatorImpl<
     T: TrueMap + 'static,
     G: Graph + 'static,
 > {
-    // const state
-    map: &'static T,
-    graph: &'static G,
-    beacons: &'static [GlobalPos],
-    max_beacon_dist: u16,
+    const_state: NavigatorStatic<T, G>,
+
+    // intermediate buffers
+    buffers: NavigatorBuffers<MAX_ENTRY_EXIT, NODE_BUFFER>,
+
+    _phantom: PhantomData<[(); TRIV_BUFFER]>,
 
     // config
     start: Option<GlobalPos>,
@@ -133,11 +178,6 @@ pub struct NavigatorImpl<
 
     // computation result
     path: Option<Vec<u16, MAX_PATH_LEN>>, // path in reverse order
-
-    // intermediate buffers
-    buffers: NavigatorBuffers<MAX_ENTRY_EXIT, NODE_BUFFER>,
-
-    _phantom: PhantomData<[(); TRIV_BUFFER]>,
 }
 
 impl<
@@ -176,11 +216,8 @@ impl<
                 start,
                 destination,
                 &mut self.buffers,
-                self.map,
-                self.graph,
-                self.beacons,
-                self.max_beacon_dist,
-                &mut self.path.as_mut().unwrap(), // unwrap: we just created path
+                self.const_state.clone(),
+                self.path.as_mut().unwrap(), // unwrap: we just created path
             )
         } else {
             Err(NavigatorError::Uninitialized)
@@ -193,13 +230,6 @@ impl<
 
     fn is_completed(&self) -> Option<bool> {
         Some(self.start? == self.destination?)
-    }
-
-    fn get_path(&self) -> Option<&[u16]> {
-        match &self.path {
-            None => None,
-            Some(n) => Some(n.as_slice()),
-        }
     }
 
     fn move_start_to(&mut self, new_start: GlobalPos) -> Result<(), NavigatorError> {
@@ -233,7 +263,7 @@ impl<
         let movement_steps = DistanceManhattan::measure(movement);
 
         let target = if let Some(&node) = path.last() {
-            self.beacons[usize::from(node)]
+            self.const_state.beacons[usize::from(node)]
         } else {
             destination
         };
@@ -241,7 +271,7 @@ impl<
         if new_start == target {
             // reached target
             _ = path.pop();
-        } else if movement_steps == 1 && good_dirs.contains(movement_dirs.get(0).unwrap()) {
+        } else if movement_steps == 1 && good_dirs.contains(movement_dirs.first().unwrap()) {
             // unwrap: there is exactly one dir
             // preferred case: single step in good dir, is really easy because of trivial
             // navigation rules
@@ -252,10 +282,7 @@ impl<
                 new_start,
                 target,
                 &mut self.buffers,
-                self.map,
-                self.graph,
-                self.beacons,
-                self.max_beacon_dist,
+                self.const_state.clone(),
                 path,
             )?;
         }
@@ -270,12 +297,18 @@ impl<
         let destination = self.destination?;
 
         let target = if let Some(&node) = path.last() {
-            self.beacons[usize::from(node)]
+            self.const_state.beacons[usize::from(node)]
         } else {
             destination
         };
 
-        Some((target - start).get(dir) > 0 && self.map.get(start + Vec2::from_direction(dir, 1)))
+        Some(
+            (target - start).get(dir) > 0
+                && self
+                    .const_state
+                    .map
+                    .get(start + Vec2::from_direction(dir, 1)),
+        )
     }
 
     fn good_dirs(&self) -> Option<Vec<Direction, 2>> {
@@ -284,7 +317,7 @@ impl<
         let destination = self.destination?;
 
         let target = if let Some(&node) = path.last() {
-            self.beacons[usize::from(node)]
+            self.const_state.beacons[usize::from(node)]
         } else {
             destination
         };
@@ -294,7 +327,11 @@ impl<
         let mut v = Vec::<Direction, 2>::new();
 
         let mut check_and_add = |dir: Direction| {
-            if self.map.get(start + Vec2::from_direction(dir, 1)) {
+            if self
+                .const_state
+                .map
+                .get(start + Vec2::from_direction(dir, 1))
+            {
                 // unwrap: there can only be two dirs to add
                 v.push(dir).unwrap();
             }
@@ -331,10 +368,12 @@ impl<
         max_beacon_dist: u16,
     ) -> Self {
         Self {
-            map,
-            graph,
-            beacons,
-            max_beacon_dist,
+            const_state: NavigatorStatic {
+                map,
+                graph,
+                beacons,
+                max_beacon_dist,
+            },
             start: None,
             destination: None,
             path: None,
@@ -373,7 +412,7 @@ fn is_navigation_trivial<const BUFFER_SIZE: usize>(
     let dist_man = DistanceManhattan::measure(vector);
     let dist_min = DistanceMin::measure(vector);
 
-    if dirs.len() == 0 {
+    if dirs.is_empty() {
         // start == destination
         Ok(true)
     } else if dirs.len() == 1 {
@@ -452,7 +491,7 @@ fn is_navigation_trivial<const BUFFER_SIZE: usize>(
                             map.get(pos)
                         })
                         .collect();
-                    if next_indices.len() == 0 {
+                    if next_indices.is_empty() {
                         // we reached a dead end
                         return Ok(false);
                     }
@@ -474,53 +513,53 @@ fn compute<
 >(
     start: GlobalPos,
     destination: GlobalPos,
-
     buffers: &mut NavigatorBuffers<MAX_ENTRY_EXIT, NODE_BUFFER>,
-
-    map: &impl TrueMap,
-    graph: &impl Graph,
-    beacons: &[GlobalPos],
-    max_beacon_dist: u16,
-
+    const_state: NavigatorStatic<impl TrueMap, impl Graph>,
     path: &mut Vec<u16, MAX_PATH_LEN>, // path in reverse order, calculation is appended, TODO can
-                                       // no longer prevent overflow errors reliably now
+                                       // no longer prevents overflow errors reliably now
 ) -> Result<(), NavigatorError> {
     // clear intermediate state
     *buffers = Default::default();
     let mut node_info_destination: Option<(u16, Node)> = None;
 
     // entry
-    *buffers.entry_nodes = beacons
+    *buffers.entry_nodes = const_state
+        .beacons
         .iter()
         .enumerate()
-        .filter(|(_, &pos)| DistanceManhattan::measure(pos - start) <= max_beacon_dist)
+        .filter(|(_, &pos)| DistanceManhattan::measure(pos - start) <= const_state.max_beacon_dist)
         .filter(|(_, &pos)| {
             // possible OutOfMemory error ignored here, but thats ok because it can only appear
             // if TRIV_BUFFER is misconfigured
-            is_navigation_trivial::<TRIV_BUFFER>(map, start, pos).is_ok_and(identity)
+            is_navigation_trivial::<TRIV_BUFFER>(const_state.map, start, pos).is_ok_and(identity)
         })
         .map(|(index, _)| u16::try_from(index).unwrap())
         .collect();
 
     // exit
-    *buffers.exit_nodes = beacons
+    *buffers.exit_nodes = const_state
+        .beacons
         .iter()
         .enumerate()
-        .filter(|(_, &pos)| DistanceManhattan::measure(destination - pos) <= max_beacon_dist)
-        .filter(|(_, &pos)| is_navigation_trivial::<TRIV_BUFFER>(map, pos, destination).unwrap()) // TODO unwrap
+        .filter(|(_, &pos)| {
+            DistanceManhattan::measure(destination - pos) <= const_state.max_beacon_dist
+        })
+        .filter(|(_, &pos)| {
+            is_navigation_trivial::<TRIV_BUFFER>(const_state.map, pos, destination).unwrap()
+        }) // TODO unwrap
         .map(|(index, _)| u16::try_from(index).unwrap())
         .collect();
 
     if start == destination
-        || (DistanceManhattan::measure(destination - start) <= max_beacon_dist
-            && is_navigation_trivial::<TRIV_BUFFER>(map, start, destination)
+        || (DistanceManhattan::measure(destination - start) <= const_state.max_beacon_dist
+            && is_navigation_trivial::<TRIV_BUFFER>(const_state.map, start, destination)
                 .map_err(|_| NavigatorError::OutOfMemory)?)
     {
         // nothing to add to path, navigation from start to destination is trivial
     } else {
         // graph initialization
         for &node_index in &*buffers.entry_nodes {
-            let pos = beacons[usize::from(node_index)];
+            let pos = const_state.beacons[usize::from(node_index)];
             let past_cost = DistanceManhattan::measure(pos - start);
 
             buffers
@@ -547,12 +586,12 @@ fn compute<
                     break 'main_loop;
                 }
                 Node::Beacon(node_index) => {
-                    let pos = beacons[usize::from(node_index)];
+                    let pos = const_state.beacons[usize::from(node_index)];
 
                     // this check ensures that nodes that were added multiple time are only
                     // processed once and might not be necessary
                     if buffers.node_info[usize::from(node_index)]
-                        .is_none_or(|(past_cost_ni, _)| u16::from(past_cost_ni) == past_cost)
+                        .is_none_or(|(past_cost_ni, _)| past_cost_ni == past_cost)
                     {
                         // neighbor is destination node
                         if buffers
@@ -590,8 +629,8 @@ fn compute<
                         }
 
                         // neighbors are beacon nodes
-                        for &neighbor in graph.after(node_index) {
-                            let pos_neighbor = beacons[usize::from(neighbor)];
+                        for &neighbor in const_state.graph.after(node_index) {
+                            let pos_neighbor = const_state.beacons[usize::from(neighbor)];
                             let past_cost_neighbor =
                                 past_cost + DistanceManhattan::measure(pos_neighbor - pos);
                             if let Some((past_cost_old, parent)) =

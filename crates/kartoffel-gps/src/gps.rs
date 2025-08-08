@@ -54,7 +54,7 @@ impl<const N: usize> Display for MapSection<N> {
             for val in line {
                 write!(f, "{}", if val { "." } else { "#" })?;
             }
-            writeln!(f, "")?;
+            writeln!(f)?;
         }
         Ok(())
     }

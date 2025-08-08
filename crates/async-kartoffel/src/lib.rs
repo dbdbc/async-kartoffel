@@ -22,7 +22,7 @@ pub use self::world::{
     AnchorDefault, Coords, Direction, Global, Local, Position, PositionAnchor, Rotation, Tile, Vec2,
 };
 
-#[cfg(any(target_arch = "riscv32"))]
+#[cfg(target_arch = "riscv32")]
 pub use kartoffel::{print, println};
 
 pub use kartoffel::{serial_buffer, serial_clear, serial_flush, serial_write};

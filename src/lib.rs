@@ -37,7 +37,7 @@ pub fn beacon_graph() -> &'static impl Graph {
 }
 
 pub fn beacons_before(index: u16) -> &'static [u16] {
-    &BEACON_GRAPH.after(index)
+    BEACON_GRAPH.after(index)
 }
 
 pub fn beacon_info() -> &'static BeaconInfo {

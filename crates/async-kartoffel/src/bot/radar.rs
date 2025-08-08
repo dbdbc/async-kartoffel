@@ -123,7 +123,7 @@ impl Guard {
         Self::with_critical_section(|guard| {
             if guard.n_scans == 0 {
                 if is_radar_ready() {
-                    radar_scan(Size::D.into());
+                    radar_scan(Size::D);
 
                     // can fail after u32::MAX iterations
                     guard.active_uuid = guard.active_uuid.wrapping_add(1);

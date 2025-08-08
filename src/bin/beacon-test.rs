@@ -40,8 +40,7 @@ async fn main_task(mut bot: Bot) -> ! {
         seed[1] = kartoffel_seed[1];
         seed[2] = kartoffel_seed[2];
         seed[3] = kartoffel_seed[3];
-        let rng = rand::rngs::SmallRng::from_seed(seed);
-        rng
+        rand::rngs::SmallRng::from_seed(seed)
     };
 
     let mut facing = bot.compass.direction().await;
@@ -177,8 +176,8 @@ async fn main_task(mut bot: Bot) -> ! {
 
             println!("done navigating");
 
-            loop {}
-            // TODO
+            panic!();
+            // TODO continue doing something
         } else {
             // do random step until pos is known
             let dir = random_direction(scan, &mut rng, facing);
@@ -221,5 +220,5 @@ fn random_direction<D: RadarSize>(
                 .is_empty()
         })
         .collect::<heapless::Vec<Direction, 4>>();
-    available_directions.choose(rng).map(|dir| *dir)
+    available_directions.choose(rng).copied()
 }

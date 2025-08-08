@@ -40,6 +40,9 @@ impl PositionBiMap {
     pub fn len(&self) -> usize {
         self.v.len()
     }
+    pub fn is_empty(&self) -> bool {
+        self.v.is_empty()
+    }
     pub fn subset(&self, indices: &[usize]) -> Self {
         let mut v = Vec::new();
         let mut h = HashMap::new();
@@ -194,7 +197,7 @@ impl Map {
     fn process_line(vec: &mut Vec<bool>, line: &str) -> anyhow::Result<()> {
         for char in line.chars() {
             let walkable = Tile::from_char(char)
-                .expect(&format!("encountered unkown char {}", char))
+                .unwrap_or_else(|| panic!("encountered unkown char {}", char))
                 .is_walkable_terrain();
             vec.push(walkable);
         }
@@ -210,7 +213,7 @@ impl Map {
             if first {
                 first = false;
             } else {
-                write!(file, "{}", "\n")?;
+                writeln!(file)?;
             }
             for &walkable in line {
                 write!(file, "{}", if walkable { "." } else { "#" })?;
@@ -238,8 +241,7 @@ impl Map {
         }
         let mut tile_iterators = maps.iter().map(|map| map.tiles.iter()).collect::<Vec<_>>();
 
-        let mut tiles = Vec::new();
-        tiles.reserve(first.tiles.len());
+        let mut tiles = Vec::with_capacity(first.tiles.len());
         let mut i = 0usize;
         while let Some(next) = tile_iterators
             .iter_mut()
@@ -288,8 +290,8 @@ impl Map {
                 }
                 if self.get(pos) {
                     // unwrap: we pushed before
-                    let last = (&mut data).iter_mut().last().unwrap();
-                    *last = *last ^ (1u8 << rem);
+                    let last = data.iter_mut().last().unwrap();
+                    *last ^= 1u8 << rem;
                 }
                 index += 1;
             }
@@ -347,7 +349,7 @@ impl IncompleteMap {
                 '↓' | '↑' | '→' | '←' => None,
                 c => Some(
                     Tile::from_char(c)
-                        .expect(&format!("encountered unknown char {}", c))
+                        .unwrap_or_else(|| panic!("encountered unknown char {}", c))
                         .is_walkable_terrain(),
                 ),
             };

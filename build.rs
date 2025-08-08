@@ -45,7 +45,7 @@ fn add_beacons(file: &mut BufWriter<impl Write>, map: &Map, max_beacon_dist: u32
     println!("  finding walkable positions ...");
     let positions = map.walkable_positions();
     println!("  creating trivial navigation graph ...");
-    let asymmetric_graph = build_trivial_navigation_graph(&map, &positions);
+    let asymmetric_graph = build_trivial_navigation_graph(map, &positions);
     println!("  selecting navigation beacons ...");
     let beacon_indices = find_beacons(max_beacon_dist, &asymmetric_graph);
     println!("  create beacon trivial navigation (sub-)graph ...");
@@ -117,7 +117,7 @@ const NAV_NODE_BUFFER: usize = {};\n",
     for row in map_chars {
         writeln!(file, "// {}", row.into_iter().collect::<String>()).unwrap();
     }
-    writeln!(file, "").unwrap();
+    writeln!(file).unwrap();
 }
 
 fn add_gps<T: MapSectionTrait>(file: &mut BufWriter<impl Write>, map: &Map) {

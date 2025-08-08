@@ -6,16 +6,25 @@ use ndarray::Array2;
 use crate::map::PositionBiMap;
 
 pub trait GraphMapping<T>: Clone {
-    fn from_index(&self, index: usize) -> Option<T>;
-    fn to_index(&self, t: T) -> Option<usize>;
+    fn get_value(&self, index: usize) -> Option<T>;
+
+    fn get_index(&self, t: T) -> Option<usize>;
+
     fn len(&self) -> usize;
+
+    fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    // TODO why exactly did I not use Eq? I think there was a reason
     fn equals(&self, other: &Self) -> bool;
 
     fn index_mapping(&self, other: &impl GraphMapping<T>) -> Vec<usize> {
         (0..self.len())
-            .map(|index| {
+            .map(|index| self.get_value(index).unwrap())
+            .map(|value| {
                 other
-                    .to_index(self.from_index(index).unwrap())
+                    .get_index(value)
                     .expect("other GraphMapping should be a superset")
             })
             .collect()
@@ -26,11 +35,11 @@ pub trait GraphMapping<T>: Clone {
 pub struct GraphMappingSingleNode;
 
 impl GraphMapping<()> for GraphMappingSingleNode {
-    fn from_index(&self, index: usize) -> Option<()> {
+    fn get_value(&self, index: usize) -> Option<()> {
         (index == 0).then_some(())
     }
 
-    fn to_index(&self, _t: ()) -> Option<usize> {
+    fn get_index(&self, _t: ()) -> Option<usize> {
         Some(0)
     }
 
@@ -43,12 +52,12 @@ impl GraphMapping<()> for GraphMappingSingleNode {
     }
 }
 
-impl<'a> GraphMapping<GlobalPos> for &'a PositionBiMap {
-    fn from_index(&self, index: usize) -> Option<GlobalPos> {
+impl GraphMapping<GlobalPos> for &'_ PositionBiMap {
+    fn get_value(&self, index: usize) -> Option<GlobalPos> {
         self.vec().get(index).copied()
     }
 
-    fn to_index(&self, t: GlobalPos) -> Option<usize> {
+    fn get_index(&self, t: GlobalPos) -> Option<usize> {
         self.hashmap().get(&t).copied()
     }
 
@@ -217,13 +226,9 @@ impl<
         let indices_start = map_start.index_mapping(&self.map_start);
         let indices_destination = map_destination.index_mapping(&self.map_destination);
         let mut ret = Graph::new(map_start, map_destination);
-        for i_start in 0..ret.len_start() {
-            for i_dest in 0..ret.len_destination() {
-                ret.set(
-                    i_start,
-                    i_dest,
-                    self.get(indices_start[i_start], indices_destination[i_dest]),
-                );
+        for (i_start, &index_start) in indices_start.iter().enumerate() {
+            for (i_dest, &index_dest) in indices_destination.iter().enumerate() {
+                ret.set(i_start, i_dest, self.get(index_start, index_dest));
             }
         }
         ret
@@ -236,10 +241,10 @@ impl<
                 if let Some(weight) = ret.get(i_start, i_dest) {
                     if !f(
                         ret.map_start
-                            .from_index(i_start)
+                            .get_value(i_start)
                             .expect("indices should be dense"),
                         ret.map_destination
-                            .from_index(i_dest)
+                            .get_value(i_dest)
                             .expect("indices should be dense"),
                         weight,
                     ) {
@@ -318,7 +323,7 @@ impl<T, Mapping: GraphMapping<T>> Graph<T, T, Mapping, Mapping> {
         let mut chained = self.clone();
         let mut i = 1usize;
         loop {
-            let new = chained.chain(&self);
+            let new = chained.chain(self);
 
             if new == chained {
                 return (chained, i);

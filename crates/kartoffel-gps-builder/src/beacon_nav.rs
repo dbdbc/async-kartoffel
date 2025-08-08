@@ -93,7 +93,7 @@ pub fn build_trivial_navigation_graph<'a>(
 ) -> PosGraph<'a, 'a> {
     let mut graph = PosGraph::new(positions, positions);
     for (index_target, &pos) in positions.vec().iter().enumerate() {
-        let trivials = get_trivial_navigables(&map, pos);
+        let trivials = get_trivial_navigables(map, pos);
 
         for start in trivials {
             let &index_start = positions.hashmap().get(&start).unwrap();
@@ -123,7 +123,7 @@ pub fn find_beacons(max_beacon_dist: u32, trivial_navigation_graph: &PosGraph) -
         let entry_exit = symmetric_graph.count_paths(&unreached_positions);
         let beacon_reachable = symmetric_graph.count_paths(&beacons);
 
-        let value = if beacon_indices.len() > 0 {
+        let value = if !beacon_indices.is_empty() {
             &entry_exit * &beacon_reachable
         } else {
             entry_exit.clone()

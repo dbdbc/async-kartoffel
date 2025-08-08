@@ -12,12 +12,12 @@ impl ArrayBuilder<'_> {
 
 impl Display for ArrayBuilder<'_> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "[\n",)?;
+        writeln!(f, "[",)?;
         for pos in self.0 {
             let vec = pos.sub_anchor();
-            write!(
+            writeln!(
                 f,
-                "    ::kartoffel_gps::pos::pos_east_north({}, {}),\n",
+                "    ::kartoffel_gps::pos::pos_east_north({}, {}),",
                 vec.east(),
                 vec.north()
             )?;

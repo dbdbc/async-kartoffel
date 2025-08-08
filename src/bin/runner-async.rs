@@ -119,7 +119,7 @@ impl<const N: usize> Evaluation for NavigationEvaluationN<N> {
                 return distance_walk_with_rotation(waypoint - pos, direction) as u8;
             }
         }
-        return u8::MAX;
+        u8::MAX
     }
 }
 
@@ -518,7 +518,7 @@ async fn background(
         }
         // destination at border of known reachable
         if destination.is_none() {
-            if let Some(mut unknown_reachables) = exploration.border(&mut map) {
+            if let Some(mut unknown_reachables) = exploration.border(&map) {
                 fn update_closest(
                     closest: &mut Option<(Position, u16)>,
                     candidate: Option<(Position, u16)>,

@@ -1,19 +1,15 @@
-use core::{convert::identity, marker::PhantomData};
+use core::convert::identity;
 
 use alloc::boxed::Box;
 use async_algorithm::{DistanceManhattan, DistanceMeasure, DistanceMin};
-use async_kartoffel::{Direction, Vec2};
+use async_kartoffel::{Direction, Global, Vec2};
 
 use heapless::{binary_heap::Min, BinaryHeap, Vec};
+use replace_with::{replace_with_or_abort, replace_with_or_abort_and_return};
 
 use crate::{const_graph::Graph, map::TrueMap, GlobalPos};
 
-#[derive(Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Clone, Copy)]
-pub enum NavigatorError {
-    OutOfMemory,
-    Uninitialized,
-    NavigationImpossible,
-}
+use core::marker::PhantomData;
 
 #[derive(Debug, Eq, PartialEq, Ord, PartialOrd, Clone, Hash)]
 pub struct BeaconInfo {
@@ -32,53 +28,867 @@ pub struct BeaconInfo {
     pub n_beacons: u32,
 }
 
-// TODO
-// states: Uninit {}
-//         Computing {start, dest}
-//         Failed {start, dest}
-//         Ready {start, dest, path}
-//         PartialReady {start, dest, path}: start has been moved to an invalid place
-// pub enum NavigatorReady {
-//     Ready,
-//     Partial,
-// }
-// pub enum NavigatorComputation {
-//     Computing,
-//     Failed,
-//     Ready {
-//         ready: NavigatorReady,
-//         path: Option<Vec<u16, MAX_PATH_LEN>>, // path in reverse order
-//     },
-// }
-// pub enum NavigatorState {
-//     Uninitialized,
-//     Initialized {
-//         start: GlobalPos,
-//         destination: GlobalPos,
-//         computation: NavigatorComputation,
-//     },
-// }
+#[derive(Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Clone, Copy)]
+pub enum Buffer {
+    Path,
+    TrivialNav,
+    Active,
+}
 
-pub trait Navigator {
-    fn initialize(&mut self, start: GlobalPos, destination: GlobalPos); // Uninit -> Computing
+#[derive(Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Clone, Copy)]
+pub enum NavigatorError {
+    OutOfMemory(Buffer),
+    NavigationImpossible,
+}
 
-    fn reset(&mut self); // any -> Uninit
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub enum UpdateType {
+    // nothing to do
+    TrivialNav,
 
-    fn get_start(&self) -> Option<GlobalPos>; // Computing, Ready, PartialReady, Failed
+    // Recompute, to account for longer distance travelled a few extra path nodes are popped
+    Recompute { traveled_since: u16 },
+}
 
-    fn get_destination(&self) -> Option<GlobalPos>; // Computing, Ready, PartialReady, Failed
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub struct ScheduledUpdate {
+    n_beacons_reached: u16,
+    complexity: UpdateType,
+}
 
-    fn compute(&mut self) -> Result<(), NavigatorError>; // Computing -> Failed, Ready
+impl ScheduledUpdate {
+    fn new(old_start: GlobalPos, new_start: GlobalPos, trivial_dest: GlobalPos) -> Self {
+        if new_start == trivial_dest {
+            Self {
+                n_beacons_reached: 1,
+                complexity: UpdateType::TrivialNav,
+            }
+        } else if new_start == old_start {
+            Self {
+                n_beacons_reached: 0,
+                complexity: UpdateType::TrivialNav,
+            }
+        } else {
+            let movement = new_start - old_start;
+            let moved_dirs = movement_dirs(movement);
+            let movement_steps = DistanceManhattan::measure(movement);
 
-    fn is_ready(&self) -> bool; // state == Ready
+            if movement_steps == 1
+                && movement_dirs(trivial_dest - old_start).contains(moved_dirs.first().unwrap())
+            {
+                // unwrap: there is exactly one dir
+                // preferred case: single step in good dir, is really easy because of trivial
+                // navigation rules
+                Self {
+                    n_beacons_reached: 0,
+                    complexity: UpdateType::TrivialNav,
+                }
+            } else {
+                // new calculation needed :(
+                Self {
+                    n_beacons_reached: 0,
+                    complexity: UpdateType::Recompute {
+                        traveled_since: movement_steps,
+                    },
+                }
+            }
+        }
+    }
 
-    fn is_completed(&self) -> Option<bool>; // Ready
+    fn update(
+        &mut self,
+        old_start: GlobalPos,
+        new_start: GlobalPos,
+        get_trivial_destination: impl FnOnce(u16) -> GlobalPos,
+    ) {
+        let trivial_dest = get_trivial_destination(self.n_beacons_reached);
 
-    fn move_start_to(&mut self, new_start: GlobalPos) -> Result<(), NavigatorError>; // Ready, PartialReady -> Ready, PartialReady
+        if new_start == trivial_dest {
+            self.n_beacons_reached += 1;
+            self.complexity = UpdateType::TrivialNav;
+        } else if new_start == old_start {
+            // no change
+        } else {
+            match self.complexity {
+                UpdateType::TrivialNav => {
+                    let movement = new_start - old_start;
+                    let moved_dirs = movement_dirs(movement);
+                    let movement_steps = DistanceManhattan::measure(movement);
 
-    fn is_dir_good(&self, dir: Direction) -> Option<bool>; // Ready
+                    if movement_steps == 1
+                        && movement_dirs(trivial_dest - old_start)
+                            .contains(moved_dirs.first().unwrap())
+                    {
+                        // unwrap: there is exactly one dir
+                        // preferred case: single step in good dir, is really easy because of trivial navigation rules
+                        // no change
+                    } else {
+                        // new calculation needed
+                        self.complexity = UpdateType::Recompute {
+                            traveled_since: movement_steps,
+                        }
+                    }
+                }
+                UpdateType::Recompute { traveled_since } => {
+                    self.complexity = UpdateType::Recompute {
+                        traveled_since: traveled_since
+                            + DistanceManhattan::measure(new_start - old_start),
+                    };
+                }
+            }
+        }
+    }
+}
 
-    fn good_dirs(&self) -> Option<Vec<Direction, 2>>; // Ready
+pub struct NavigatorResourcesImpl<
+    const MAX_PATH_LEN: usize,
+    const MAX_ENTRY_EXIT: usize,
+    const TRIV_BUFFER: usize,
+    const NODE_BUFFER: usize,
+    T: TrueMap + 'static,
+    G: Graph + 'static,
+> {
+    // constant
+    context: NavigatorContext<T, G>,
+
+    // buffers for computation
+    buffers: NavigatorBuffers<MAX_ENTRY_EXIT, NODE_BUFFER>,
+
+    // buffer for resulting path in reverse order
+    // path contains only beacons, not start and destination nodes
+    path: Box<Vec<u16, MAX_PATH_LEN>>,
+
+    _phantom: PhantomData<([(); MAX_PATH_LEN], [(); TRIV_BUFFER])>,
+}
+
+pub trait NavigatorResources {
+    fn compute_new(
+        &mut self,
+        start: GlobalPos,
+        destination: GlobalPos,
+    ) -> Result<(), NavigatorError>;
+    fn compute_update(
+        &mut self,
+        start: GlobalPos,
+        destination: GlobalPos,
+        update: ScheduledUpdate,
+    ) -> Result<(), NavigatorError>;
+    /// get the next beacon to navigate to, skipping n
+    fn path_beacon(&self, n_skip: u16) -> Option<GlobalPos>;
+    fn path_beacon_indices(&self) -> &[u16];
+}
+
+impl<
+        const MAX_PATH_LEN: usize,
+        const MAX_ENTRY_EXIT: usize,
+        const TRIV_BUFFER: usize,
+        const NODE_BUFFER: usize,
+        T: TrueMap + 'static,
+        G: Graph + 'static,
+    > NavigatorResources
+    for NavigatorResourcesImpl<MAX_PATH_LEN, MAX_ENTRY_EXIT, TRIV_BUFFER, NODE_BUFFER, T, G>
+{
+    fn compute_new(
+        &mut self,
+        start: GlobalPos,
+        destination: GlobalPos,
+    ) -> Result<(), NavigatorError> {
+        *self.path = Vec::new();
+        compute::<MAX_PATH_LEN, MAX_ENTRY_EXIT, TRIV_BUFFER, NODE_BUFFER>(
+            start,
+            destination,
+            &mut self.buffers,
+            self.context.clone(),
+            &mut *self.path,
+        )
+    }
+
+    fn compute_update(
+        &mut self,
+        start: GlobalPos,
+        destination: GlobalPos,
+        update: ScheduledUpdate,
+    ) -> Result<(), NavigatorError> {
+        match update.complexity {
+            UpdateType::TrivialNav => {
+                self.path.truncate(
+                    self.path
+                        .len()
+                        .saturating_sub(usize::from(update.n_beacons_reached)),
+                );
+                Ok(())
+            }
+            UpdateType::Recompute { traveled_since } => {
+                // a heuristic for how many additional nodes should be popped for every tile
+                // traveled since movement was no longer along trivial navigation route
+                let n_pop_heuristic = traveled_since.div_ceil(4);
+
+                self.path.truncate(
+                    self.path
+                        .len()
+                        .saturating_sub(usize::from(update.n_beacons_reached))
+                        .saturating_sub(usize::from(n_pop_heuristic)),
+                );
+
+                compute::<MAX_PATH_LEN, MAX_ENTRY_EXIT, TRIV_BUFFER, NODE_BUFFER>(
+                    start,
+                    self.path
+                        .last()
+                        .map(|&index| self.context.beacons[usize::from(index)])
+                        .unwrap_or(destination),
+                    &mut self.buffers,
+                    self.context.clone(),
+                    &mut *self.path,
+                )
+            }
+        }
+    }
+
+    fn path_beacon(&self, n_skip: u16) -> Option<GlobalPos> {
+        // unwrap: path indices are expected to be valid beacons
+        self.path
+            .iter()
+            .rev()
+            .fuse()
+            .nth(usize::from(n_skip))
+            .map(|&index| *self.context.beacons.get(usize::from(index)).unwrap())
+    }
+
+    fn path_beacon_indices(&self) -> &[u16] {
+        self.path.as_slice()
+    }
+}
+
+impl<
+        const MAX_PATH_LEN: usize,
+        const MAX_ENTRY_EXIT: usize,
+        const TRIV_BUFFER: usize,
+        const NODE_BUFFER: usize,
+        T: TrueMap + 'static,
+        G: Graph + 'static,
+    > NavigatorResourcesImpl<MAX_PATH_LEN, MAX_ENTRY_EXIT, TRIV_BUFFER, NODE_BUFFER, T, G>
+{
+    /// note: heap allocates memory for the computation buffers and path
+    pub fn new(
+        map: &'static T,
+        graph: &'static G,
+        beacons: &'static [GlobalPos],
+        max_beacon_dist: u16,
+    ) -> Self {
+        Self {
+            context: NavigatorContext {
+                map,
+                graph,
+                beacons,
+                max_beacon_dist,
+            },
+            buffers: Default::default(),
+            path: Default::default(),
+            _phantom: PhantomData,
+        }
+    }
+}
+
+mod private {
+    use crate::beacon::states;
+
+    pub trait Sealed {}
+
+    impl Sealed for states::New {}
+    impl Sealed for states::OnlyDestination {}
+    impl Sealed for states::OnlyStart {}
+    impl Sealed for states::Initialized {}
+    impl Sealed for states::Failed {}
+    impl Sealed for states::Ready {}
+    impl Sealed for states::UpdateScheduled {}
+    impl Sealed for states::UpdateFailed {}
+}
+
+// finite state machine:
+//
+// New             -> set_start:       OnlyStart
+//                 -> set_destination: OnlyDestination
+//
+// OnlyStart       -> set_destination: Initialized
+//                 -> set_start:       OnlyStart
+//                 -> reset:           New
+//
+// OnlyDestination -> set_start:       Initialized
+//                 -> reset:           New
+//                 -> set_destination: OnlyDestination
+//
+// Initialized     -> compute:         Ready | Failed | Completed
+//                 -> set_start:       Initialized
+//                 -> set_destination: Initialized
+//                 -> reset:           New
+//
+// Failed          -> set_destination: Initialized
+//                 -> set_start:       Initialized
+//                 -> reset:           New
+//
+// Ready           -> set_destination: Initialized
+//                 -> set_start:       UpdateScheduled
+//                 -> reset:           New
+//
+// UpdateScheduled -> set_destination: Initialized
+//                 -> set_start:       UpdateScheduled
+//                 -> reset:           New
+//                 -> compute:         Ready | UpdateFailed | Completed
+//
+// UpdateFailed    -> set_destination: Initialized
+//                 -> set_start:       UpdateScheduled
+//                 -> reset:           New
+//
+// Completed       -> set_destination: Initialized
+//                 -> set_start:       Initialized
+//                 -> reset:           New
+//
+// considerable computation effort is restricted to compute functions
+//
+pub mod states {
+    use crate::{
+        beacon::{
+            Navigator, NavigatorEnum, NavigatorError, NavigatorState, NavigatorStateFailed,
+            NavigatorStateHasDestination, NavigatorStateHasDestinationNoPath,
+            NavigatorStateHasPath, NavigatorStateHasStart, NavigatorStateResettable,
+            ScheduledUpdate,
+        },
+        GlobalPos,
+    };
+
+    // path is stored in shared state because of const generics ergonomics and potential buffer size
+    pub struct New {}
+    pub struct OnlyDestination {
+        pub destination: GlobalPos,
+    }
+    pub struct OnlyStart {
+        pub start: GlobalPos,
+    }
+    pub struct Failed {
+        pub start: GlobalPos,
+        pub destination: GlobalPos,
+        pub error: NavigatorError,
+    }
+    pub struct Initialized {
+        pub start: GlobalPos,
+        pub destination: GlobalPos,
+    }
+    pub struct Ready {
+        pub start: GlobalPos,
+        pub destination: GlobalPos,
+    }
+    pub struct UpdateScheduled {
+        pub start: GlobalPos,
+        pub destination: GlobalPos,
+        pub updates: ScheduledUpdate,
+    }
+    pub struct UpdateFailed {
+        pub start: GlobalPos,
+        pub destination: GlobalPos,
+        pub updates: ScheduledUpdate,
+        pub error: NavigatorError,
+    }
+
+    impl NavigatorState for New {
+        fn to_enum<R: super::NavigatorResources>(nav: Navigator<R, Self>) -> NavigatorEnum<R> {
+            NavigatorEnum::New(nav)
+        }
+    }
+    impl NavigatorState for OnlyDestination {
+        fn to_enum<R: super::NavigatorResources>(nav: Navigator<R, Self>) -> NavigatorEnum<R> {
+            NavigatorEnum::OnlyDestination(nav)
+        }
+    }
+    impl NavigatorState for OnlyStart {
+        fn to_enum<R: super::NavigatorResources>(nav: Navigator<R, Self>) -> NavigatorEnum<R> {
+            NavigatorEnum::OnlyStart(nav)
+        }
+    }
+    impl NavigatorState for Failed {
+        fn to_enum<R: super::NavigatorResources>(nav: Navigator<R, Self>) -> NavigatorEnum<R> {
+            NavigatorEnum::Failed(nav)
+        }
+    }
+    impl NavigatorState for Initialized {
+        fn to_enum<R: super::NavigatorResources>(nav: Navigator<R, Self>) -> NavigatorEnum<R> {
+            NavigatorEnum::Initialized(nav)
+        }
+    }
+    impl NavigatorState for Ready {
+        fn to_enum<R: super::NavigatorResources>(nav: Navigator<R, Self>) -> NavigatorEnum<R> {
+            NavigatorEnum::Ready(nav)
+        }
+    }
+    impl NavigatorState for UpdateScheduled {
+        fn to_enum<R: super::NavigatorResources>(nav: Navigator<R, Self>) -> NavigatorEnum<R> {
+            NavigatorEnum::UpdateScheduled(nav)
+        }
+    }
+    impl NavigatorState for UpdateFailed {
+        fn to_enum<R: super::NavigatorResources>(nav: Navigator<R, Self>) -> NavigatorEnum<R> {
+            NavigatorEnum::UpdateFailed(nav)
+        }
+    }
+
+    impl NavigatorStateResettable for OnlyDestination {}
+    impl NavigatorStateResettable for OnlyStart {}
+    impl NavigatorStateResettable for Failed {}
+    impl NavigatorStateResettable for Initialized {}
+    impl NavigatorStateResettable for Ready {}
+    impl NavigatorStateResettable for UpdateScheduled {}
+    impl NavigatorStateResettable for UpdateFailed {}
+
+    impl NavigatorStateHasStart for OnlyStart {
+        fn get_start(&self) -> GlobalPos {
+            self.start
+        }
+    }
+    impl NavigatorStateHasStart for Failed {
+        fn get_start(&self) -> GlobalPos {
+            self.start
+        }
+    }
+    impl NavigatorStateHasStart for Initialized {
+        fn get_start(&self) -> GlobalPos {
+            self.start
+        }
+    }
+    impl NavigatorStateHasStart for Ready {
+        fn get_start(&self) -> GlobalPos {
+            self.start
+        }
+    }
+    impl NavigatorStateHasStart for UpdateScheduled {
+        fn get_start(&self) -> GlobalPos {
+            self.start
+        }
+    }
+    impl NavigatorStateHasStart for UpdateFailed {
+        fn get_start(&self) -> GlobalPos {
+            self.start
+        }
+    }
+
+    impl NavigatorStateHasDestination for OnlyDestination {
+        fn get_destination(&self) -> GlobalPos {
+            self.destination
+        }
+    }
+    impl NavigatorStateHasDestination for Failed {
+        fn get_destination(&self) -> GlobalPos {
+            self.destination
+        }
+    }
+    impl NavigatorStateHasDestination for Initialized {
+        fn get_destination(&self) -> GlobalPos {
+            self.destination
+        }
+    }
+    impl NavigatorStateHasDestination for Ready {
+        fn get_destination(&self) -> GlobalPos {
+            self.destination
+        }
+    }
+    impl NavigatorStateHasDestination for UpdateScheduled {
+        fn get_destination(&self) -> GlobalPos {
+            self.destination
+        }
+    }
+    impl NavigatorStateHasDestination for UpdateFailed {
+        fn get_destination(&self) -> GlobalPos {
+            self.destination
+        }
+    }
+
+    impl NavigatorStateHasDestinationNoPath for OnlyDestination {}
+    impl NavigatorStateHasDestinationNoPath for Failed {}
+    impl NavigatorStateHasDestinationNoPath for Initialized {}
+
+    impl NavigatorStateFailed for Failed {
+        fn get_error(&self) -> NavigatorError {
+            self.error
+        }
+    }
+    impl NavigatorStateFailed for UpdateFailed {
+        fn get_error(&self) -> NavigatorError {
+            self.error
+        }
+    }
+
+    impl NavigatorStateHasPath for Ready {}
+    impl NavigatorStateHasPath for UpdateScheduled {}
+    impl NavigatorStateHasPath for UpdateFailed {}
+}
+
+// navigator state traits
+pub trait NavigatorState: private::Sealed
+where
+    Self: Sized,
+{
+    fn to_enum<R: NavigatorResources>(nav: Navigator<R, Self>) -> NavigatorEnum<R>;
+}
+pub trait NavigatorStateResettable: NavigatorState {}
+pub trait NavigatorStateHasStart: NavigatorState {
+    fn get_start(&self) -> GlobalPos;
+}
+pub trait NavigatorStateHasDestination: NavigatorState {
+    fn get_destination(&self) -> GlobalPos;
+}
+pub trait NavigatorStateHasDestinationNoPath: NavigatorStateHasDestination {}
+pub trait NavigatorStateFailed: NavigatorState {
+    fn get_error(&self) -> NavigatorError;
+}
+pub trait NavigatorStateHasPath: NavigatorState {
+    fn get_beacons<R: NavigatorResources>(resources: &R) -> &[u16] {
+        resources.path_beacon_indices()
+    }
+}
+
+pub struct Navigator<R: NavigatorResources, S: NavigatorState> {
+    resources: R,
+    state: S,
+}
+
+// has anything
+impl<R: NavigatorResources, S: NavigatorStateResettable> Navigator<R, S> {
+    pub fn reset(self) -> Navigator<R, states::New> {
+        Navigator {
+            resources: self.resources,
+            state: states::New {},
+        }
+    }
+}
+
+// has start
+impl<R: NavigatorResources, S: NavigatorStateHasStart> Navigator<R, S> {
+    pub fn set_destination(self, destination: GlobalPos) -> Navigator<R, states::Initialized> {
+        Navigator {
+            resources: self.resources,
+            state: states::Initialized {
+                start: self.state.get_start(),
+                destination,
+            },
+        }
+    }
+    pub fn get_start(&self) -> GlobalPos {
+        self.state.get_start()
+    }
+}
+
+// has destination
+impl<R: NavigatorResources, S: NavigatorStateHasDestination> Navigator<R, S> {
+    pub fn get_destination(&self) -> GlobalPos {
+        self.state.get_destination()
+    }
+}
+
+// has destination and simple set_start implementation
+impl<R: NavigatorResources, S: NavigatorStateHasDestinationNoPath> Navigator<R, S> {
+    pub fn set_start(self, start: GlobalPos) -> Navigator<R, states::Initialized> {
+        Navigator {
+            resources: self.resources,
+            state: states::Initialized {
+                start,
+                destination: self.state.get_destination(),
+            },
+        }
+    }
+}
+
+// has failed
+impl<R: NavigatorResources, S: NavigatorStateFailed> Navigator<R, S> {
+    pub fn get_error(&self) -> NavigatorError {
+        self.state.get_error()
+    }
+}
+
+// has beacons
+impl<R: NavigatorResources, S: NavigatorStateHasPath> Navigator<R, S> {
+    pub fn get_beacons(&self) -> &[u16] {
+        S::get_beacons(&self.resources)
+    }
+}
+
+// exclusive to New
+impl<R: NavigatorResources> Navigator<R, states::New> {
+    pub fn new(resources: R) -> Self {
+        Self {
+            resources,
+            state: states::New {},
+        }
+    }
+    pub fn set_destination(self, destination: GlobalPos) -> Navigator<R, states::OnlyDestination> {
+        Navigator {
+            resources: self.resources,
+            state: states::OnlyDestination { destination },
+        }
+    }
+    pub fn set_start(self, start: GlobalPos) -> Navigator<R, states::OnlyStart> {
+        Navigator {
+            resources: self.resources,
+            state: states::OnlyStart { start },
+        }
+    }
+}
+
+// exclusive to OnlyDestination
+impl<R: NavigatorResources> Navigator<R, states::OnlyDestination> {
+    pub fn set_destination(self, destination: GlobalPos) -> Navigator<R, states::OnlyDestination> {
+        Navigator {
+            resources: self.resources,
+            state: states::OnlyDestination { destination },
+        }
+    }
+}
+
+// exclusive to OnlyStart
+impl<R: NavigatorResources> Navigator<R, states::OnlyStart> {
+    pub fn set_start(self, start: GlobalPos) -> Navigator<R, states::OnlyStart> {
+        Navigator {
+            resources: self.resources,
+            state: states::OnlyStart { start },
+        }
+    }
+}
+
+// exclusive to Initialized
+impl<R: NavigatorResources> Navigator<R, states::Initialized> {
+    pub fn compute(mut self) -> Result<Navigator<R, states::Ready>, Navigator<R, states::Failed>> {
+        let (start, destination) = (self.state.start, self.state.destination);
+        match self.resources.compute_new(start, destination) {
+            Ok(()) => Ok(Navigator {
+                resources: self.resources,
+                state: states::Ready { start, destination },
+            }),
+            Err(error) => Err(Navigator {
+                resources: self.resources,
+                state: states::Failed {
+                    start,
+                    destination,
+                    error,
+                },
+            }),
+        }
+    }
+}
+
+// exclusive to Ready
+impl<R: NavigatorResources> Navigator<R, states::Ready> {
+    pub fn set_start(self, start: GlobalPos) -> Navigator<R, states::UpdateScheduled> {
+        Navigator {
+            state: states::UpdateScheduled {
+                start,
+                destination: self.state.destination,
+                updates: ScheduledUpdate::new(self.state.start, start, self.next_trivial_target()),
+            },
+            resources: self.resources,
+        }
+    }
+
+    pub fn next_trivial_target(&self) -> GlobalPos {
+        self.resources
+            .path_beacon(0)
+            .unwrap_or(self.state.destination)
+    }
+
+    pub fn is_completed(&self) -> bool {
+        self.state.start == self.state.destination
+    }
+}
+
+// exclusive to UpdateScheduled
+impl<R: NavigatorResources> Navigator<R, states::UpdateScheduled> {
+    pub fn set_start(self, start: GlobalPos) -> Navigator<R, states::UpdateScheduled> {
+        Navigator {
+            state: states::UpdateScheduled {
+                start,
+                destination: self.state.destination,
+                updates: {
+                    let mut updates = self.state.updates;
+                    updates.update(self.state.start, start, |n_skip| {
+                        self.resources
+                            .path_beacon(n_skip)
+                            .unwrap_or(self.state.destination)
+                    });
+                    updates
+                },
+            },
+            resources: self.resources,
+        }
+    }
+    pub fn compute(
+        mut self,
+    ) -> Result<Navigator<R, states::Ready>, Navigator<R, states::UpdateFailed>> {
+        let (start, destination, updates) =
+            (self.state.start, self.state.destination, self.state.updates);
+        match self.resources.compute_update(start, destination, updates) {
+            Ok(()) => Ok(Navigator {
+                resources: self.resources,
+                state: states::Ready { start, destination },
+            }),
+            Err(error) => Err(Navigator {
+                resources: self.resources,
+                state: states::UpdateFailed {
+                    start,
+                    destination,
+                    updates,
+                    error,
+                },
+            }),
+        }
+    }
+}
+
+// exclusive to UpdateFailed
+impl<R: NavigatorResources> Navigator<R, states::UpdateFailed> {
+    pub fn set_start(self, start: GlobalPos) -> Navigator<R, states::UpdateScheduled> {
+        Navigator {
+            state: states::UpdateScheduled {
+                start,
+                destination: self.state.destination,
+                updates: {
+                    let mut updates = self.state.updates;
+                    updates.update(self.state.start, start, |n_skip| {
+                        self.resources
+                            .path_beacon(n_skip)
+                            .unwrap_or(self.state.destination)
+                    });
+                    updates
+                },
+            },
+            resources: self.resources,
+        }
+    }
+}
+
+pub enum NavigatorEnum<R: NavigatorResources> {
+    New(Navigator<R, states::New>),
+    OnlyStart(Navigator<R, states::OnlyStart>),
+    OnlyDestination(Navigator<R, states::OnlyDestination>),
+    Initialized(Navigator<R, states::Initialized>),
+    Ready(Navigator<R, states::Ready>),
+    Failed(Navigator<R, states::Failed>),
+    UpdateFailed(Navigator<R, states::UpdateFailed>),
+    UpdateScheduled(Navigator<R, states::UpdateScheduled>),
+}
+
+impl<R: NavigatorResources> NavigatorEnum<R> {
+    pub fn set_destination(&mut self, destination: GlobalPos) {
+        replace_with_or_abort(self, |self_| match self_ {
+            NavigatorEnum::New(nav) => nav.set_destination(destination).into(),
+            NavigatorEnum::OnlyStart(nav) => nav.set_destination(destination).into(),
+            NavigatorEnum::OnlyDestination(nav) => nav.set_destination(destination).into(),
+            NavigatorEnum::Initialized(nav) => nav.set_destination(destination).into(),
+            NavigatorEnum::Ready(nav) => nav.set_destination(destination).into(),
+            NavigatorEnum::Failed(nav) => nav.set_destination(destination).into(),
+            NavigatorEnum::UpdateFailed(nav) => nav.set_destination(destination).into(),
+            NavigatorEnum::UpdateScheduled(nav) => nav.set_destination(destination).into(),
+        });
+    }
+
+    pub fn set_start(&mut self, start: GlobalPos) {
+        replace_with_or_abort(self, |self_| match self_ {
+            NavigatorEnum::New(nav) => nav.set_start(start).into(),
+            NavigatorEnum::OnlyStart(nav) => nav.set_start(start).into(),
+            NavigatorEnum::OnlyDestination(nav) => nav.set_start(start).into(),
+            NavigatorEnum::Initialized(nav) => nav.set_start(start).into(),
+            NavigatorEnum::Ready(nav) => nav.set_start(start).into(),
+            NavigatorEnum::Failed(nav) => nav.set_start(start).into(),
+            NavigatorEnum::UpdateFailed(nav) => nav.set_start(start).into(),
+            NavigatorEnum::UpdateScheduled(nav) => nav.set_start(start).into(),
+        });
+    }
+
+    pub fn reset(&mut self) {
+        replace_with_or_abort(self, |self_| match self_ {
+            NavigatorEnum::New(nav) => nav.into(),
+            NavigatorEnum::OnlyStart(nav) => nav.reset().into(),
+            NavigatorEnum::OnlyDestination(nav) => nav.reset().into(),
+            NavigatorEnum::Initialized(nav) => nav.reset().into(),
+            NavigatorEnum::Ready(nav) => nav.reset().into(),
+            NavigatorEnum::Failed(nav) => nav.reset().into(),
+            NavigatorEnum::UpdateFailed(nav) => nav.reset().into(),
+            NavigatorEnum::UpdateScheduled(nav) => nav.reset().into(),
+        });
+    }
+
+    /// result does not specify whether the computation succeded, but only if the initial state was
+    /// one where a computation was possible
+    pub fn try_compute(&mut self) -> bool {
+        replace_with_or_abort_and_return(self, |self_| match self_ {
+            NavigatorEnum::Initialized(nav) => (true, nav.compute().into()),
+            NavigatorEnum::UpdateScheduled(nav) => (true, nav.compute().into()),
+            _ => (false, self_),
+        })
+    }
+
+    pub fn try_get_start(&self) -> Option<GlobalPos> {
+        match self {
+            NavigatorEnum::New(_nav) => None,
+            NavigatorEnum::OnlyStart(nav) => Some(nav.get_start()),
+            NavigatorEnum::OnlyDestination(_nav) => None,
+            NavigatorEnum::Initialized(nav) => Some(nav.get_start()),
+            NavigatorEnum::Ready(nav) => Some(nav.get_start()),
+            NavigatorEnum::Failed(nav) => Some(nav.get_start()),
+            NavigatorEnum::UpdateFailed(nav) => Some(nav.get_start()),
+            NavigatorEnum::UpdateScheduled(nav) => Some(nav.get_start()),
+        }
+    }
+
+    pub fn try_get_destination(&self) -> Option<GlobalPos> {
+        match self {
+            NavigatorEnum::New(_nav) => None,
+            NavigatorEnum::OnlyStart(_nav) => None,
+            NavigatorEnum::OnlyDestination(nav) => Some(nav.get_destination()),
+            NavigatorEnum::Initialized(nav) => Some(nav.get_destination()),
+            NavigatorEnum::Ready(nav) => Some(nav.get_destination()),
+            NavigatorEnum::Failed(nav) => Some(nav.get_destination()),
+            NavigatorEnum::UpdateFailed(nav) => Some(nav.get_destination()),
+            NavigatorEnum::UpdateScheduled(nav) => Some(nav.get_destination()),
+        }
+    }
+
+    pub fn try_get_error(&self) -> Option<NavigatorError> {
+        match self {
+            NavigatorEnum::Failed(nav) => Some(nav.get_error()),
+            NavigatorEnum::UpdateFailed(nav) => Some(nav.get_error()),
+            _ => None,
+        }
+    }
+
+    pub fn try_next_trivial_target(&self) -> Option<GlobalPos> {
+        if let NavigatorEnum::Ready(nav) = self {
+            Some(nav.next_trivial_target())
+        } else {
+            None
+        }
+    }
+
+    pub fn try_get_beacons(&self) -> Option<&[u16]> {
+        match self {
+            NavigatorEnum::Ready(nav) => Some(nav.get_beacons()),
+            NavigatorEnum::UpdateFailed(nav) => Some(nav.get_beacons()),
+            NavigatorEnum::UpdateScheduled(nav) => Some(nav.get_beacons()),
+            _ => None,
+        }
+    }
+}
+
+impl<R: NavigatorResources, S: NavigatorState> From<Navigator<R, S>> for NavigatorEnum<R> {
+    fn from(value: Navigator<R, S>) -> Self {
+        S::to_enum(value)
+    }
+}
+
+impl<R: NavigatorResources, S1: NavigatorState, S2: NavigatorState>
+    From<Result<Navigator<R, S1>, Navigator<R, S2>>> for NavigatorEnum<R>
+{
+    fn from(value: Result<Navigator<R, S1>, Navigator<R, S2>>) -> Self {
+        match value {
+            Ok(nav) => nav.into(),
+            Err(nav) => nav.into(),
+        }
+    }
 }
 
 // Ord derived implementation ensures desired `Min` behaviour for the priority queue
@@ -139,246 +949,20 @@ impl<const MAX_ENTRY_EXIT: usize, const NODE_BUFFER: usize> Default
 }
 
 /// const navigator state
-pub struct NavigatorStatic<T: TrueMap + 'static, G: Graph + 'static> {
+pub struct NavigatorContext<T: TrueMap + 'static, G: Graph + 'static> {
     map: &'static T,
     graph: &'static G,
     beacons: &'static [GlobalPos],
     max_beacon_dist: u16,
 }
 
-impl<T: TrueMap, G: Graph> Clone for NavigatorStatic<T, G> {
+impl<T: TrueMap, G: Graph> Clone for NavigatorContext<T, G> {
     fn clone(&self) -> Self {
         Self {
             map: self.map,
             graph: self.graph,
             beacons: self.beacons,
             max_beacon_dist: self.max_beacon_dist,
-        }
-    }
-}
-
-pub struct NavigatorImpl<
-    const MAX_PATH_LEN: usize,
-    const MAX_ENTRY_EXIT: usize,
-    const TRIV_BUFFER: usize,
-    const NODE_BUFFER: usize,
-    T: TrueMap + 'static,
-    G: Graph + 'static,
-> {
-    const_state: NavigatorStatic<T, G>,
-
-    // intermediate buffers
-    buffers: NavigatorBuffers<MAX_ENTRY_EXIT, NODE_BUFFER>,
-
-    _phantom: PhantomData<[(); TRIV_BUFFER]>,
-
-    // config
-    start: Option<GlobalPos>,
-    destination: Option<GlobalPos>,
-
-    // computation result
-    path: Option<Vec<u16, MAX_PATH_LEN>>, // path in reverse order
-}
-
-impl<
-        const MAX_PATH_LEN: usize,
-        const MAX_ENTRY_EXIT: usize,
-        const TRIV_BUFFER: usize,
-        const NODE_BUFFER: usize,
-        T: TrueMap,
-        G: Graph,
-    > Navigator for NavigatorImpl<MAX_PATH_LEN, MAX_ENTRY_EXIT, TRIV_BUFFER, NODE_BUFFER, T, G>
-{
-    fn initialize(&mut self, start: GlobalPos, destination: GlobalPos) {
-        self.start = Some(start);
-        self.destination = Some(destination);
-        self.path = None;
-    }
-
-    fn reset(&mut self) {
-        self.start = None;
-        self.destination = None;
-        self.path = None;
-    }
-
-    fn get_start(&self) -> Option<GlobalPos> {
-        self.start
-    }
-
-    fn get_destination(&self) -> Option<GlobalPos> {
-        self.destination
-    }
-
-    fn compute(&mut self) -> Result<(), NavigatorError> {
-        if let (Some(start), Some(destination)) = (self.start, self.destination) {
-            self.path = Some(Vec::new());
-            compute::<MAX_PATH_LEN, MAX_ENTRY_EXIT, TRIV_BUFFER, NODE_BUFFER>(
-                start,
-                destination,
-                &mut self.buffers,
-                self.const_state.clone(),
-                self.path.as_mut().unwrap(), // unwrap: we just created path
-            )
-        } else {
-            Err(NavigatorError::Uninitialized)
-        }
-    }
-
-    fn is_ready(&self) -> bool {
-        self.start.is_some() && self.destination.is_some() && self.path.is_some()
-    }
-
-    fn is_completed(&self) -> Option<bool> {
-        Some(self.start? == self.destination?)
-    }
-
-    fn move_start_to(&mut self, new_start: GlobalPos) -> Result<(), NavigatorError> {
-        let good_dirs = self.good_dirs().ok_or(NavigatorError::Uninitialized)?;
-
-        let path = self.path.as_mut().ok_or(NavigatorError::Uninitialized)?;
-        let old_start = self.start.as_mut().ok_or(NavigatorError::Uninitialized)?;
-        let destination = self.destination.ok_or(NavigatorError::Uninitialized)?;
-
-        // no movement
-        if new_start == *old_start {
-            return Ok(());
-        }
-
-        let movement = new_start - *old_start;
-        let movement_dirs = {
-            let mut v = Vec::<Direction, 2>::new();
-            // unwraps: there can only be two directions to move to
-            match movement.get(Direction::East) {
-                ..0 => v.push(Direction::West).unwrap(),
-                0 => {}
-                1.. => v.push(Direction::East).unwrap(),
-            }
-            match movement.get(Direction::North) {
-                ..0 => v.push(Direction::South).unwrap(),
-                0 => {}
-                1.. => v.push(Direction::North).unwrap(),
-            }
-            v
-        };
-        let movement_steps = DistanceManhattan::measure(movement);
-
-        let target = if let Some(&node) = path.last() {
-            self.const_state.beacons[usize::from(node)]
-        } else {
-            destination
-        };
-
-        if new_start == target {
-            // reached target
-            _ = path.pop();
-        } else if movement_steps == 1 && good_dirs.contains(movement_dirs.first().unwrap()) {
-            // unwrap: there is exactly one dir
-            // preferred case: single step in good dir, is really easy because of trivial
-            // navigation rules
-            *old_start = new_start;
-        } else {
-            // new calculation needed :( but to save cost, only to target
-            compute::<MAX_PATH_LEN, MAX_ENTRY_EXIT, TRIV_BUFFER, NODE_BUFFER>(
-                new_start,
-                target,
-                &mut self.buffers,
-                self.const_state.clone(),
-                path,
-            )?;
-        }
-        *old_start = new_start;
-        Ok(())
-    }
-
-    // checks if the next tile in dir is walkable, and if this is the right direction
-    fn is_dir_good(&self, dir: Direction) -> Option<bool> {
-        let path = self.path.as_ref()?;
-        let start = self.start?;
-        let destination = self.destination?;
-
-        let target = if let Some(&node) = path.last() {
-            self.const_state.beacons[usize::from(node)]
-        } else {
-            destination
-        };
-
-        Some(
-            (target - start).get(dir) > 0
-                && self
-                    .const_state
-                    .map
-                    .get(start + Vec2::from_direction(dir, 1)),
-        )
-    }
-
-    fn good_dirs(&self) -> Option<Vec<Direction, 2>> {
-        let path = self.path.as_ref()?;
-        let start = self.start?;
-        let destination = self.destination?;
-
-        let target = if let Some(&node) = path.last() {
-            self.const_state.beacons[usize::from(node)]
-        } else {
-            destination
-        };
-
-        let movement = target - start;
-
-        let mut v = Vec::<Direction, 2>::new();
-
-        let mut check_and_add = |dir: Direction| {
-            if self
-                .const_state
-                .map
-                .get(start + Vec2::from_direction(dir, 1))
-            {
-                // unwrap: there can only be two dirs to add
-                v.push(dir).unwrap();
-            }
-        };
-
-        match movement.get(Direction::East) {
-            ..0 => check_and_add(Direction::West),
-            0 => {}
-            1.. => check_and_add(Direction::East),
-        }
-        match movement.get(Direction::North) {
-            ..0 => check_and_add(Direction::South),
-            0 => {}
-            1.. => check_and_add(Direction::North),
-        }
-
-        Some(v)
-    }
-}
-
-impl<
-        const MAX_PATH_LEN: usize,
-        const MAX_ENTRY_EXIT: usize,
-        const TRIV_BUFFER: usize,
-        const NODE_BUFFER: usize,
-        T: TrueMap,
-        G: Graph,
-    > NavigatorImpl<MAX_PATH_LEN, MAX_ENTRY_EXIT, TRIV_BUFFER, NODE_BUFFER, T, G>
-{
-    pub fn new(
-        map: &'static T,
-        graph: &'static G,
-        beacons: &'static [GlobalPos],
-        max_beacon_dist: u16,
-    ) -> Self {
-        Self {
-            const_state: NavigatorStatic {
-                map,
-                graph,
-                beacons,
-                max_beacon_dist,
-            },
-            start: None,
-            destination: None,
-            path: None,
-            buffers: NavigatorBuffers::default(),
-            _phantom: Default::default(),
         }
     }
 }
@@ -433,7 +1017,7 @@ fn is_navigation_trivial<const BUFFER_SIZE: usize>(
 
         // out of bounds
         if usize::from(dist_min + 1) > BUFFER_SIZE {
-            return Err(NavigatorError::OutOfMemory);
+            return Err(NavigatorError::OutOfMemory(Buffer::TrivialNav));
         };
 
         let mut actives_next = [false; BUFFER_SIZE];
@@ -505,6 +1089,12 @@ fn is_navigation_trivial<const BUFFER_SIZE: usize>(
     }
 }
 
+/// calculates the fastes path from start to destination and appends it to the path (path is in
+/// reverse order, so the newly computed parts are actually resolved first)
+///
+/// buffers are reset at the start of this function, so their content does not matter
+///
+/// TODO check for no exit nodes for faster error if destination is not walkable
 fn compute<
     const MAX_PATH_LEN: usize,
     const MAX_ENTRY_EXIT: usize,
@@ -514,7 +1104,7 @@ fn compute<
     start: GlobalPos,
     destination: GlobalPos,
     buffers: &mut NavigatorBuffers<MAX_ENTRY_EXIT, NODE_BUFFER>,
-    const_state: NavigatorStatic<impl TrueMap, impl Graph>,
+    const_state: NavigatorContext<impl TrueMap, impl Graph>,
     path: &mut Vec<u16, MAX_PATH_LEN>, // path in reverse order, calculation is appended, TODO can
                                        // no longer prevents overflow errors reliably now
 ) -> Result<(), NavigatorError> {
@@ -553,7 +1143,7 @@ fn compute<
     if start == destination
         || (DistanceManhattan::measure(destination - start) <= const_state.max_beacon_dist
             && is_navigation_trivial::<TRIV_BUFFER>(const_state.map, start, destination)
-                .map_err(|_| NavigatorError::OutOfMemory)?)
+                .map_err(|_| NavigatorError::OutOfMemory(Buffer::TrivialNav))?)
     {
         // nothing to add to path, navigation from start to destination is trivial
     } else {
@@ -569,7 +1159,7 @@ fn compute<
                     past_cost,
                     node: Node::Beacon(node_index),
                 })
-                .map_err(|_| NavigatorError::OutOfMemory)?;
+                .map_err(|_| NavigatorError::OutOfMemory(Buffer::Active))?;
             buffers.node_info[usize::from(node_index)] = Some((past_cost, Node::Start));
         }
 
@@ -679,9 +1269,15 @@ fn compute<
                     Node::Start => break,
                     Node::Destination => unreachable!(),
                     Node::Beacon(beacon_index) => {
-                        path.push(beacon_index)
-                            .map_err(|_| NavigatorError::OutOfMemory)?;
-                        // the node must have appeared while traversing the graph
+                        // prevent duplicates, that can happen e.g. through path updates
+                        if path
+                            .last()
+                            .is_none_or(|&last_index| last_index != beacon_index)
+                        {
+                            path.push(beacon_index)
+                                .map_err(|_| NavigatorError::OutOfMemory(Buffer::Path))?;
+                        }
+                        // unwrap: the node must have appeared while traversing the graph
                         parent_node = buffers.node_info[usize::from(beacon_index)].unwrap().1;
                     }
                 }
@@ -691,6 +1287,25 @@ fn compute<
         }
     }
     Ok(())
+}
+
+pub fn movement_dirs(movement: Vec2<Global>) -> Vec<Direction, 2> {
+    let mut v = Vec::<Direction, 2>::new();
+    let mut check_and_add = |dir: Direction| {
+        // unwrap: there can only be two dirs to add
+        v.push(dir).unwrap();
+    };
+    match movement.get(Direction::East) {
+        ..0 => check_and_add(Direction::West),
+        0 => {}
+        1.. => check_and_add(Direction::East),
+    }
+    match movement.get(Direction::North) {
+        ..0 => check_and_add(Direction::South),
+        0 => {}
+        1.. => check_and_add(Direction::North),
+    }
+    v
 }
 
 #[cfg(test)]

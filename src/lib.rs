@@ -4,7 +4,9 @@ extern crate alloc;
 
 use async_kartoffel::Vec2;
 use kartoffel_gps::{
-    beacon::{BeaconInfo, Navigator, NavigatorImpl},
+    beacon::{
+        BeaconInfo, {NavigatorResources, NavigatorResourcesImpl},
+    },
     const_graph::Graph,
     gps::{MapSection, MapSectionTrait},
     map::TrueMap,
@@ -57,8 +59,9 @@ pub fn get_navigator_info() -> (usize, usize, usize, usize) {
     )
 }
 
-pub fn make_navigator() -> impl Navigator {
-    NavigatorImpl::<
+// note: heap allocates memory
+pub fn navigator_resources() -> impl NavigatorResources {
+    NavigatorResourcesImpl::<
         NAV_MAX_PATH_LEN,
         NAV_MAX_ENTRY_EXIT,
         NAV_TRIV_BUFFER,

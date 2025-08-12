@@ -4,12 +4,13 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-phf_shared.workspace = true
 async-kartoffel = {path = "../../crates/async-kartoffel", default-features = false}
 async-algorithm = {path = "../../crates/async-algorithm", default-features = false}
 test-kartoffel = {path = "../../crates/test-kartoffel", optional = true}
+phf_shared.workspace = true
 heapless.workspace = true
 rand.workspace = true
+replace_with.workspace = true
 
 [features]
 default = ["test-kartoffel"]

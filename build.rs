@@ -26,7 +26,7 @@ fn main() {
 
     add_true_map(file, map);
     add_gps::<MapSection<7>>(file, map);
-    add_beacons(file, map, 6);
+    add_beacons(file, map, 4);
 }
 
 fn add_true_map(file: &mut BufWriter<impl Write>, map: &Map) {
@@ -88,13 +88,16 @@ fn add_beacons(file: &mut BufWriter<impl Write>, map: &Map, max_beacon_dist: u32
         "const NAV_MAX_PATH_LEN: usize = {};
 const NAV_MAX_ENTRY_EXIT: usize = {};
 const NAV_TRIV_BUFFER: usize = {};
-const NAV_NODE_BUFFER: usize = {};\n",
-        beacon_info.max_path_length.next_power_of_two(),
+const NAV_NODE_BUFFER: usize = {};
+const NAV_ACTIVE_BUFFER: usize = {};
+",
+        (beacon_info.max_path_length * 2).next_power_of_two(), // multiply by two to hedge against (very unlikely) path updates
         beacon_info
             .max_beacons_entry
             .max(beacon_info.max_beacons_exit)
             .next_power_of_two(),
         (beacon_info.max_beacon_dist + 2).div(2),
+        beacon_info.n_beacons + 2,
         (beacon_info.n_beacons + 2).next_power_of_two(),
     )
     .unwrap();

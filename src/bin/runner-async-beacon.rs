@@ -15,7 +15,6 @@ use example_kartoffels::navigator_resources;
 use heapless::Vec;
 use kartoffel_gps::{
     beacon::{Navigator, NavigatorEnum, NavigatorError},
-    map::TrueMap,
     GlobalPos,
 };
 use static_cell::StaticCell;
@@ -26,36 +25,6 @@ extern crate alloc;
 struct NavigationSection {
     trivial_dest: GlobalPos,
     start: GlobalPos,
-}
-
-impl NavigationSection {
-    // checks if the next tile in dir is walkable, and if this is the right direction
-    fn is_dir_good(&self, map: &impl TrueMap, start: GlobalPos, dir: Direction) -> bool {
-        (self.trivial_dest - self.start).get(dir) > 0
-            && map.get(start + Vec2::from_direction(dir, 1))
-    }
-
-    fn good_dirs(&self, map: &impl TrueMap, start: GlobalPos) -> Vec<Direction, 2> {
-        let movement = self.trivial_dest - self.start;
-        let mut v = Vec::<Direction, 2>::new();
-        let mut check_and_add = |dir: Direction| {
-            if map.get(start + Vec2::from_direction(dir, 1)) {
-                // unwrap: there can only be two dirs to add
-                v.push(dir).unwrap();
-            }
-        };
-        match movement.get(Direction::East) {
-            ..0 => check_and_add(Direction::West),
-            0 => {}
-            1.. => check_and_add(Direction::East),
-        }
-        match movement.get(Direction::North) {
-            ..0 => check_and_add(Direction::South),
-            0 => {}
-            1.. => check_and_add(Direction::North),
-        }
-        v
-    }
 }
 
 #[no_mangle]
@@ -85,10 +54,12 @@ fn main() {
         spawner
             .spawn(foreground(
                 Bot::take(),
-                channel_position,
-                signal_navigation,
-                signal_destination,
-                signal_reset,
+                DataSync {
+                    channel_position,
+                    signal_navigation,
+                    signal_destination,
+                    signal_reset,
+                },
             ))
             .unwrap();
         spawner
@@ -461,13 +432,7 @@ fn movement(
 }
 
 #[task]
-async fn foreground(
-    mut bot: Bot,
-    channel_position: &'static Channel<NoopRawMutex, GlobalPos, 16>,
-    signal_navigation: &'static Signal<NoopRawMutex, Result<NavigationSection, NavigatorError>>,
-    signal_destination: &'static Signal<NoopRawMutex, GlobalPos>,
-    signal_reset: &'static Signal<NoopRawMutex, ()>,
-) -> ! {
+async fn foreground(mut bot: Bot, sync: DataSync) -> ! {
     // settings
     const MAX_N_BOTS: usize = 28;
 
@@ -684,6 +649,7 @@ async fn navigation(sync: DataSync) -> ! {
                 }
                 .await
             }
+            NavigatorEnum::Invalid => unreachable!(),
         }
     }
 }

@@ -60,12 +60,14 @@ pub fn get_navigator_info() -> (usize, usize, usize, usize) {
 }
 
 // note: heap allocates memory
+#[inline(never)]
 pub fn navigator_resources() -> impl NavigatorResources {
     NavigatorResourcesImpl::<
         NAV_MAX_PATH_LEN,
         NAV_MAX_ENTRY_EXIT,
         NAV_TRIV_BUFFER,
         NAV_NODE_BUFFER,
+        NAV_ACTIVE_BUFFER,
         _,
         _,
     >::new(

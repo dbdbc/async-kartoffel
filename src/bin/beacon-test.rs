@@ -152,7 +152,9 @@ async fn main_task(mut bot: Bot) -> ! {
             }
 
             println!("nav {}", navigator.get_start());
-            while (Instant::now() - time_switch).unwrap() < Duration::from_secs(30) {
+            while (Instant::now() - time_switch).unwrap() < Duration::from_secs(30)
+                && !navigator.is_completed()
+            {
                 let scan = bot.radar.scan::<D3>().await;
                 for dir in Direction::all() {
                     if movement_dirs(navigator.next_trivial_target() - navigator.get_start())

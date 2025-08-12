@@ -10,7 +10,6 @@ test-kartoffel = {path = "../../crates/test-kartoffel", optional = true}
 phf_shared.workspace = true
 heapless.workspace = true
 rand.workspace = true
-replace_with.workspace = true
 
 [features]
 default = ["test-kartoffel"]

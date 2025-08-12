@@ -66,3 +66,12 @@ add the top of your library to enable tests. Might not work for binaries though.
 # Running native binaries
 
 ```cargo run --release --package kartoffel-gps-builder --target x86_64-unknown-linux-gnu -Z build-std=core,std,alloc --bin analyze-map```
+
+# Analysing stack size
+
+Using https://github.com/Dirbaio/cargo-call-stack, but update ```llvm-sys``` to match llvm version (at time of writing `llvm-sys = "201.0.1"`)
+
+```
+cargo call-stack -i target/riscv32-kartoffel-bot/release/beacon-test --target riscv32-unknown-none -v > cg.dot
+dot -Tsvg cg.dot > cg.svg
+```

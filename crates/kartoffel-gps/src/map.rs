@@ -2,7 +2,7 @@ use async_kartoffel::{Global, Vec2};
 
 use crate::GlobalPos;
 
-pub trait TrueMap {
+pub trait TrueMap: Send + Sync + 'static {
     /// whether terrain at [`pos`] is walkable
     fn get(&self, pos: GlobalPos) -> bool;
     fn vec_east(&self) -> Vec2<Global>;

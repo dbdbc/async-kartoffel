@@ -20,7 +20,7 @@ impl Display for ConstSparseGraphNode {
     }
 }
 
-pub trait Graph {
+pub trait Graph: Send + Sync + 'static {
     fn after(&self, index: u16) -> &[u16];
     fn before(&self, index: u16) -> &[u16];
     fn size(&self) -> u16;

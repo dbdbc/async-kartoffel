@@ -59,8 +59,8 @@ pub fn get_navigator_info() -> (usize, usize, usize, usize) {
     )
 }
 
-// note: heap allocates memory
-#[inline(never)]
+/// Allocates the heap buffers used for the Navigator, and stores references to the map, beacons,
+/// and beacon graph.
 pub fn navigator_resources() -> impl NavigatorResources {
     NavigatorResourcesImpl::<
         NAV_MAX_PATH_LEN,

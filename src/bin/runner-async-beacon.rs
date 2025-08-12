@@ -589,7 +589,7 @@ async fn navigation(sync: DataSync) -> ! {
                             nav.set_destination(destination).into()
                         }
                         Some(SyncReceived::Reset) => nav.reset().into(),
-                        None => nav.compute().into(),
+                        None => nav.compute().await.into(),
                     }
                 }
                 .await
@@ -644,7 +644,7 @@ async fn navigation(sync: DataSync) -> ! {
                             nav.set_destination(destination).into()
                         }
                         Some(SyncReceived::Reset) => nav.reset().into(),
-                        None => nav.compute().into(),
+                        None => nav.compute().await.into(),
                     }
                 }
                 .await

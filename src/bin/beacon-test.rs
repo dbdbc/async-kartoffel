@@ -76,6 +76,7 @@ async fn main_task(mut bot: Bot) -> ! {
         println!("starting computation");
         let mut navigator = navigator_outer
             .compute()
+            .await
             .unwrap_or_else(|nav| panic!("computation failed: {:?}", nav.get_error()));
 
         println!("start navigating");
@@ -87,7 +88,7 @@ async fn main_task(mut bot: Bot) -> ! {
                     if new_pos != pos {
                         println!("correction pos: {} -> {}", pos, new_pos);
                         pos = new_pos;
-                        navigator = match navigator.set_start(pos).compute() {
+                        navigator = match navigator.set_start(pos).compute().await {
                             Ok(nav) => nav,
                             Err(nav) => {
                                 // panic because position is known exactly, so this means
@@ -133,7 +134,7 @@ async fn main_task(mut bot: Bot) -> ! {
                     println!("we're stuck :(");
                 }
             }
-            navigator = match navigator_idle.set_start(pos).compute() {
+            navigator = match navigator_idle.set_start(pos).compute().await {
                 Ok(nav) => nav,
                 Err(nav) => {
                     println!("update comp failed: {:?}", nav.get_error());
@@ -141,7 +142,7 @@ async fn main_task(mut bot: Bot) -> ! {
                     pos = random_walk(&mut bot, &mut facing, &mut rng).await;
                     println!("found position: {}", pos);
                     let nav = nav.set_start(pos);
-                    nav.compute().map_err(|nav| nav.get_error()).unwrap()
+                    nav.compute().await.map_err(|nav| nav.get_error()).unwrap()
                 }
             };
             {
@@ -189,7 +190,7 @@ async fn main_task(mut bot: Bot) -> ! {
                             println!("{}: {:?}", length, tail);
                         }
                         pos += Vec2::new_front(1).global(facing);
-                        navigator = match navigator.set_start(pos).compute() {
+                        navigator = match navigator.set_start(pos).compute().await {
                             Ok(nav) => nav,
                             Err(nav) => {
                                 println!("update comp failed: {:?}", nav.get_error());
@@ -197,7 +198,7 @@ async fn main_task(mut bot: Bot) -> ! {
                                 pos = random_walk(&mut bot, &mut facing, &mut rng).await;
                                 println!("found position: {}", pos);
                                 let nav = nav.set_start(pos);
-                                nav.compute().map_err(|nav| nav.get_error()).unwrap()
+                                nav.compute().await.map_err(|nav| nav.get_error()).unwrap()
                             }
                         };
                         break;

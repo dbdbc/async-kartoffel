@@ -1,7 +1,7 @@
-use core::{convert::identity, mem};
+use core::{convert::identity, future::Future, mem};
 
 use alloc::boxed::Box;
-use async_algorithm::{DistanceManhattan, DistanceMeasure, DistanceMin};
+use async_algorithm::{Breakpoint, DistanceManhattan, DistanceMeasure, DistanceMin};
 use async_kartoffel::{Direction, Global, Vec2};
 
 use heapless::{binary_heap::Min, BinaryHeap, Vec};
@@ -176,15 +176,15 @@ pub trait NavigatorResources {
         &mut self,
         start: GlobalPos,
         destination: GlobalPos,
-    ) -> Result<(), NavigatorError>;
-    // impl Future<Output = Result<(), NavigatorError>> + Send;
+    ) -> impl Future<Output = Result<(), NavigatorError>> + Send;
+    // Result<(), NavigatorError>;
     fn compute_update(
         &mut self,
         start: GlobalPos,
         destination: GlobalPos,
         update: ScheduledUpdate,
-    ) -> Result<(), NavigatorError>;
-    // impl Future<Output = Result<(), NavigatorError>> + Send;
+    ) -> impl Future<Output = Result<(), NavigatorError>> + Send;
+    // Result<(), NavigatorError>;
 
     /// get the next beacon to navigate to, skipping n
     fn path_beacon(&self, n_skip: u16) -> Option<GlobalPos>;
@@ -210,7 +210,7 @@ impl<
         G,
     >
 {
-    fn compute_new(
+    async fn compute_new(
         &mut self,
         start: GlobalPos,
         destination: GlobalPos,
@@ -223,10 +223,10 @@ impl<
             self.context.clone(),
             &mut *self.path,
         )
-        // .await
+        .await
     }
 
-    fn compute_update(
+    async fn compute_update(
         &mut self,
         start: GlobalPos,
         destination: GlobalPos,
@@ -263,7 +263,7 @@ impl<
                     self.context.clone(),
                     &mut *self.path,
                 )
-                // .await
+                .await
             }
         }
     }
@@ -687,9 +687,11 @@ impl<R: NavigatorResources> Navigator<R, states::OnlyStart> {
 
 // exclusive to Initialized
 impl<R: NavigatorResources> Navigator<R, states::Initialized> {
-    pub fn compute(mut self) -> Result<Navigator<R, states::Ready>, Navigator<R, states::Failed>> {
+    pub async fn compute(
+        mut self,
+    ) -> Result<Navigator<R, states::Ready>, Navigator<R, states::Failed>> {
         let (start, destination) = (self.state.start, self.state.destination);
-        match self.resources.compute_new(start, destination) {
+        match self.resources.compute_new(start, destination).await {
             Ok(()) => Ok(Navigator {
                 resources: self.resources,
                 state: states::Ready { start, destination },
@@ -750,12 +752,16 @@ impl<R: NavigatorResources> Navigator<R, states::UpdateScheduled> {
             resources: self.resources,
         }
     }
-    pub fn compute(
+    pub async fn compute(
         mut self,
     ) -> Result<Navigator<R, states::Ready>, Navigator<R, states::UpdateFailed>> {
         let (start, destination, updates) =
             (self.state.start, self.state.destination, self.state.updates);
-        match self.resources.compute_update(start, destination, updates) {
+        match self
+            .resources
+            .compute_update(start, destination, updates)
+            .await
+        {
             Ok(()) => Ok(Navigator {
                 resources: self.resources,
                 state: states::Ready { start, destination },
@@ -852,11 +858,11 @@ impl<R: NavigatorResources> NavigatorEnum<R> {
 
     /// result does not specify whether the computation succeded, but only if the initial state was
     /// one where a computation was possible
-    pub fn try_compute(&mut self) -> bool {
+    pub async fn try_compute(&mut self) -> bool {
         let success;
         (success, *self) = match mem::replace(self, Self::Invalid) {
-            Self::Initialized(nav) => (true, nav.compute().into()),
-            Self::UpdateScheduled(nav) => (true, nav.compute().into()),
+            Self::Initialized(nav) => (true, nav.compute().await.into()),
+            Self::UpdateScheduled(nav) => (true, nav.compute().await.into()),
             owned => (false, owned),
         };
         success
@@ -1164,7 +1170,7 @@ fn is_navigation_trivial<const BUFFER_SIZE: usize>(
 /// buffers are reset at the start of this function, so their content does not matter
 ///
 /// TODO check for no exit nodes for faster error if destination is not walkable
-fn compute<
+async fn compute<
     const MAX_PATH_LEN: usize,
     const MAX_ENTRY_EXIT: usize,
     const TRIV_BUFFER: usize,
@@ -1184,42 +1190,36 @@ fn compute<
     let mut node_info_destination: Option<(u16, Node)> = None;
 
     // entry
-    {
-        let entry_nodes: &mut Vec<u16, MAX_ENTRY_EXIT> = &mut buffers.entry_nodes;
-        let context = context.clone();
-        *entry_nodes = context
-            .beacons
-            .iter()
-            .enumerate()
-            .filter(|(_, &pos)| DistanceManhattan::measure(pos - start) <= context.max_beacon_dist)
-            .filter(|(_, &pos)| {
-                // possible OutOfMemory error ignored here, but thats ok because it can only appear
-                // if TRIV_BUFFER is misconfigured
-                is_navigation_trivial::<TRIV_BUFFER>(context.map, start, pos).is_ok_and(identity)
-            })
-            .map(|(index, _)| u16::try_from(index).unwrap())
-            .collect();
-    };
+    *buffers.entry_nodes = context
+        .beacons
+        .iter()
+        .enumerate()
+        .filter(|(_, &pos)| DistanceManhattan::measure(pos - start) <= context.max_beacon_dist)
+        .filter(|(_, &pos)| {
+            // possible OutOfMemory error ignored here, but thats ok because it can only appear
+            // if TRIV_BUFFER is misconfigured
+            is_navigation_trivial::<TRIV_BUFFER>(context.map, start, pos).is_ok_and(identity)
+        })
+        .map(|(index, _)| u16::try_from(index).unwrap())
+        .collect();
+
+    Breakpoint::new().await;
 
     // exit
-    {
-        let exit_nodes: &mut Vec<u16, MAX_ENTRY_EXIT> = &mut buffers.exit_nodes;
-        let context = context.clone();
-        *exit_nodes = context
-            .beacons
-            .iter()
-            .enumerate()
-            .filter(|(_, &pos)| {
-                DistanceManhattan::measure(destination - pos) <= context.max_beacon_dist
-            })
-            .filter(|(_, &pos)| {
-                is_navigation_trivial::<TRIV_BUFFER>(context.map, pos, destination).unwrap()
-            }) // TODO unwrap
-            .map(|(index, _)| u16::try_from(index).unwrap())
-            .collect();
-    };
+    *buffers.exit_nodes = context
+        .beacons
+        .iter()
+        .enumerate()
+        .filter(|(_, &pos)| {
+            DistanceManhattan::measure(destination - pos) <= context.max_beacon_dist
+        })
+        .filter(|(_, &pos)| {
+            is_navigation_trivial::<TRIV_BUFFER>(context.map, pos, destination).unwrap()
+        }) // TODO unwrap
+        .map(|(index, _)| u16::try_from(index).unwrap())
+        .collect();
 
-    // Breakpoint::new().await;
+    Breakpoint::new().await;
 
     if start == destination
         || (DistanceManhattan::measure(destination - start) <= context.max_beacon_dist
@@ -1227,116 +1227,93 @@ fn compute<
                 .map_err(|_| NavigatorError::OutOfMemory(Buffer::TrivialNav))?)
     {
         // nothing to add to path, navigation from start to destination is trivial
+        Ok(())
     } else {
         // graph initialization
-        {
-            let context = context.clone();
-            let active: &mut BinaryHeap<NavActiveEntry, Min, ACTIVE_BUFFER> = &mut buffers.active;
-            let entry_nodes: &Vec<u16, MAX_ENTRY_EXIT> = &buffers.entry_nodes;
-            let node_info: &mut [Option<(u16, Node)>; NODE_BUFFER] = &mut buffers.node_info;
-            for &node_index in entry_nodes {
-                let pos = context.beacons[usize::from(node_index)];
-                let past_cost = DistanceManhattan::measure(pos - start);
+        for &node_index in &*buffers.entry_nodes {
+            let pos = context.beacons[usize::from(node_index)];
+            let past_cost = DistanceManhattan::measure(pos - start);
 
-                active
-                    .push(NavActiveEntry {
-                        estimated_cost: past_cost + DistanceManhattan::measure(destination - pos),
-                        past_cost,
-                        node: Node::Beacon(node_index),
-                    })
-                    .map_err(|_| NavigatorError::OutOfMemory(Buffer::Active))?;
-                node_info[usize::from(node_index)] = Some((past_cost, Node::Start));
-            }
-            Ok(())
-        }?;
+            buffers
+                .active
+                .push(NavActiveEntry {
+                    estimated_cost: past_cost + DistanceManhattan::measure(destination - pos),
+                    past_cost,
+                    node: Node::Beacon(node_index),
+                })
+                .map_err(|_| NavigatorError::OutOfMemory(Buffer::Active))?;
+            buffers.node_info[usize::from(node_index)] = Some((past_cost, Node::Start));
+        }
 
-        // Breakpoint::new().await;
+        Breakpoint::new().await;
 
         // graph traversal
+        let mut counter: u8 = 0;
+        'main_loop: while let Some(NavActiveEntry {
+            estimated_cost: _,
+            past_cost,
+            node,
+        }) = buffers.active.pop()
         {
-            let active: &mut BinaryHeap<NavActiveEntry, Min, ACTIVE_BUFFER> = &mut buffers.active;
-            let exit_nodes: &mut Vec<u16, MAX_ENTRY_EXIT> = &mut buffers.exit_nodes;
-            let node_info: &mut [Option<(u16, Node)>; NODE_BUFFER] = &mut buffers.node_info;
-            let node_info_destination: &mut Option<(u16, Node)> = &mut node_info_destination;
-            // graph traversal
-            let mut counter: u8 = 0;
-            'main_loop: while let Some(NavActiveEntry {
-                estimated_cost: _,
-                past_cost,
-                node,
-            }) = active.pop()
-            {
-                match node {
-                    Node::Start => core::unreachable!("start is never added to the active nodes"),
-                    Node::Destination => {
-                        break 'main_loop;
-                    }
-                    Node::Beacon(node_index) => {
-                        let pos = context.beacons[usize::from(node_index)];
+            match node {
+                Node::Start => core::unreachable!("start is never added to the active nodes"),
+                Node::Destination => {
+                    break 'main_loop;
+                }
+                Node::Beacon(node_index) => {
+                    let pos = context.beacons[usize::from(node_index)];
 
-                        // this check ensures that nodes that were added multiple time are only
-                        // processed once and might not be necessary
-                        if node_info[usize::from(node_index)]
-                            .is_none_or(|(past_cost_ni, _)| past_cost_ni == past_cost)
-                        {
-                            // neighbor is destination node
-                            if exit_nodes.contains(&node_index) {
-                                let total_cost =
-                                    past_cost + DistanceManhattan::measure(destination - pos);
-                                if let Some((total_cost_old, parent)) = node_info_destination {
-                                    if total_cost < *total_cost_old {
-                                        *total_cost_old = total_cost;
-                                        *parent = node;
-                                    }
-
-                                    active
-                                        .push(NavActiveEntry {
-                                            estimated_cost: total_cost,
-                                            past_cost: total_cost,
-                                            node: Node::Destination,
-                                        })
-                                        .unwrap();
-                                } else {
-                                    *node_info_destination = Some((total_cost, node));
-
-                                    active
-                                        .push(NavActiveEntry {
-                                            estimated_cost: total_cost,
-                                            past_cost: total_cost,
-                                            node: Node::Destination,
-                                        })
-                                        .unwrap();
+                    // this check ensures that nodes that were added multiple time are only
+                    // processed once and might not be necessary
+                    if buffers.node_info[usize::from(node_index)]
+                        .is_none_or(|(past_cost_ni, _)| past_cost_ni == past_cost)
+                    {
+                        // neighbor is destination node
+                        if buffers.exit_nodes.contains(&node_index) {
+                            let total_cost =
+                                past_cost + DistanceManhattan::measure(destination - pos);
+                            if let Some((total_cost_old, parent)) = &mut node_info_destination {
+                                if total_cost < *total_cost_old {
+                                    *total_cost_old = total_cost;
+                                    *parent = node;
                                 }
+
+                                buffers
+                                    .active
+                                    .push(NavActiveEntry {
+                                        estimated_cost: total_cost,
+                                        past_cost: total_cost,
+                                        node: Node::Destination,
+                                    })
+                                    .unwrap();
+                            } else {
+                                node_info_destination = Some((total_cost, node));
+
+                                buffers
+                                    .active
+                                    .push(NavActiveEntry {
+                                        estimated_cost: total_cost,
+                                        past_cost: total_cost,
+                                        node: Node::Destination,
+                                    })
+                                    .unwrap();
                             }
+                        }
 
-                            // neighbors are beacon nodes
-                            for &neighbor in context.graph.after(node_index) {
-                                let pos_neighbor = context.beacons[usize::from(neighbor)];
-                                let past_cost_neighbor =
-                                    past_cost + DistanceManhattan::measure(pos_neighbor - pos);
-                                if let Some((past_cost_old, parent)) =
-                                    &mut node_info[usize::from(neighbor)]
-                                {
-                                    if past_cost_neighbor < *past_cost_old {
-                                        *past_cost_old = past_cost_neighbor;
-                                        *parent = node;
+                        // neighbors are beacon nodes
+                        for &neighbor in context.graph.after(node_index) {
+                            let pos_neighbor = context.beacons[usize::from(neighbor)];
+                            let past_cost_neighbor =
+                                past_cost + DistanceManhattan::measure(pos_neighbor - pos);
+                            if let Some((past_cost_old, parent)) =
+                                &mut (&mut buffers.node_info)[usize::from(neighbor)]
+                            {
+                                if past_cost_neighbor < *past_cost_old {
+                                    *past_cost_old = past_cost_neighbor;
+                                    *parent = node;
 
-                                        active
-                                            .push(NavActiveEntry {
-                                                estimated_cost: past_cost_neighbor
-                                                    + DistanceManhattan::measure(
-                                                        destination - pos_neighbor,
-                                                    ),
-                                                past_cost: past_cost_neighbor,
-                                                node: Node::Beacon(neighbor),
-                                            })
-                                            .unwrap();
-                                    }
-                                } else {
-                                    node_info[usize::from(neighbor)] =
-                                        Some((past_cost_neighbor, node));
-
-                                    active
+                                    buffers
+                                        .active
                                         .push(NavActiveEntry {
                                             estimated_cost: past_cost_neighbor
                                                 + DistanceManhattan::measure(
@@ -1347,47 +1324,60 @@ fn compute<
                                         })
                                         .unwrap();
                                 }
+                            } else {
+                                buffers.node_info[usize::from(neighbor)] =
+                                    Some((past_cost_neighbor, node));
+
+                                buffers
+                                    .active
+                                    .push(NavActiveEntry {
+                                        estimated_cost: past_cost_neighbor
+                                            + DistanceManhattan::measure(
+                                                destination - pos_neighbor,
+                                            ),
+                                        past_cost: past_cost_neighbor,
+                                        node: Node::Beacon(neighbor),
+                                    })
+                                    .unwrap();
                             }
                         }
                     }
-                };
-
-                counter = counter.wrapping_add(1);
-                if counter.rem_euclid(16) == 0 {
-                    // Breakpoint::new().await;
                 }
+            };
+
+            counter = counter.wrapping_add(1);
+            if counter.rem_euclid(16) == 0 {
+                Breakpoint::new().await;
             }
-        };
+        }
+
+        Breakpoint::new().await;
 
         // path collection
-        {
-            let node_info: &[Option<(u16, Node)>; NODE_BUFFER] = &buffers.node_info;
-            let node_info_destination: &Option<(u16, Node)> = &node_info_destination;
-            if let Some((_cost, mut parent_node)) = node_info_destination {
-                loop {
-                    match parent_node {
-                        Node::Start => return Ok(()),
-                        Node::Destination => core::unreachable!(),
-                        Node::Beacon(beacon_index) => {
-                            // prevent duplicates, that can happen e.g. through path updates
-                            if path
-                                .last()
-                                .is_none_or(|&last_index| last_index != beacon_index)
-                            {
-                                path.push(beacon_index)
-                                    .map_err(|_| NavigatorError::OutOfMemory(Buffer::Path))?;
-                            }
-                            // unwrap: the node must have appeared while traversing the graph
-                            parent_node = node_info[usize::from(beacon_index)].unwrap().1;
+        if let Some((_cost, mut parent_node)) = &node_info_destination {
+            loop {
+                match parent_node {
+                    Node::Start => break,
+                    Node::Destination => core::unreachable!(),
+                    Node::Beacon(beacon_index) => {
+                        // prevent duplicates, that can happen e.g. through path updates
+                        if path
+                            .last()
+                            .is_none_or(|&last_index| last_index != beacon_index)
+                        {
+                            path.push(beacon_index)
+                                .map_err(|_| NavigatorError::OutOfMemory(Buffer::Path))?;
                         }
+                        // unwrap: the node must have appeared while traversing the graph
+                        parent_node = (&buffers.node_info)[usize::from(beacon_index)].unwrap().1;
                     }
                 }
-            } else {
-                Err(NavigatorError::NavigationImpossible)
             }
-        }?;
+            Ok(())
+        } else {
+            Err(NavigatorError::NavigationImpossible)
+        }
     }
-    Ok(())
 }
 
 pub fn movement_dirs(movement: Vec2<Global>) -> Vec<Direction, 2> {

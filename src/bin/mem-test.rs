@@ -8,9 +8,9 @@ extern crate alloc;
 
 #[no_mangle]
 fn main() {
-    //
+    // stack overflow error:
     // firmware crashed: invalid access on 0x000ffffc+4
-    //
+
     // largest possible stack array
     // let mut x = [255u8; 3833];
     // println!("{}", core::mem::size_of_val(&x));
@@ -50,6 +50,4 @@ fn main() {
         println!("{}", x.first().unwrap());
         println!("{}", y.first().unwrap());
     }
-
-    loop {}
 }

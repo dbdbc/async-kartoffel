@@ -25,6 +25,10 @@ impl Instant {
 pub struct Duration(u32);
 
 impl Duration {
+    pub fn since(instant: Instant) -> Option<Self> {
+        Instant::now() - instant
+    }
+
     pub fn from_ticks(n: u32) -> Self {
         Self(n)
     }

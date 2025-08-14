@@ -11,7 +11,7 @@ use async_kartoffel::{
 use embassy_executor::{task, Executor};
 use example_kartoffels::{beacon_info, get_global_pos, get_navigator_info, navigator_resources};
 use kartoffel_gps::{
-    beacon::{movement_dirs, Navigator},
+    beacon::Navigator,
     gps::{MapSection, MapSectionTrait},
     GlobalPos,
 };
@@ -158,7 +158,8 @@ async fn main_task(mut bot: Bot) -> ! {
             {
                 let scan = bot.radar.scan::<D3>().await;
                 for dir in Direction::all() {
-                    if movement_dirs(navigator.next_trivial_target() - navigator.get_start())
+                    if (navigator.next_trivial_target() - navigator.get_start())
+                        .directions()
                         .contains(&dir)
                         && scan
                             .at(Vec2::from_direction(dir, 1).local(facing))

@@ -38,3 +38,10 @@ fn main() {
     test_main();
     loop {}
 }
+
+/// kill bot
+pub fn exit() {
+    unsafe {
+        core::ptr::read_volatile(0xFFFF_FFFF as *const u32);
+    }
+}

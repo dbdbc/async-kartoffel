@@ -1,4 +1,5 @@
 use core::{
+    cmp::Ordering,
     marker::PhantomData,
     ops::{Add, Mul, Neg, Sub},
 };
@@ -100,6 +101,23 @@ impl Vec2<Global> {
             Direction::South => self.south(),
             Direction::East => self.east(),
             Direction::West => self.west(),
+        }
+    }
+
+    pub fn directions(self) -> &'static [Direction] {
+        match (
+            self.get(Direction::East).cmp(&0),
+            self.get(Direction::North).cmp(&0),
+        ) {
+            (Ordering::Less, Ordering::Less) => &[Direction::West, Direction::South],
+            (Ordering::Less, Ordering::Equal) => &[Direction::West],
+            (Ordering::Less, Ordering::Greater) => &[Direction::West, Direction::North],
+            (Ordering::Equal, Ordering::Less) => &[Direction::South],
+            (Ordering::Equal, Ordering::Equal) => &[],
+            (Ordering::Equal, Ordering::Greater) => &[Direction::North],
+            (Ordering::Greater, Ordering::Less) => &[Direction::East, Direction::South],
+            (Ordering::Greater, Ordering::Equal) => &[Direction::East],
+            (Ordering::Greater, Ordering::Greater) => &[Direction::East, Direction::North],
         }
     }
 }

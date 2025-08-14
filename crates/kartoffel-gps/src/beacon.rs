@@ -2,7 +2,7 @@ use core::{convert::identity, future::Future, mem};
 
 use alloc::boxed::Box;
 use async_algorithm::{Breakpoint, DistanceManhattan, DistanceMeasure, DistanceMin};
-use async_kartoffel::{Direction, Global, Vec2};
+use async_kartoffel::{Direction, Vec2};
 
 use heapless::{binary_heap::Min, BinaryHeap, Vec};
 
@@ -79,11 +79,13 @@ impl ScheduledUpdate {
             }
         } else {
             let movement = new_start - old_start;
-            let moved_dirs = movement_dirs(movement);
+            let moved_dirs = movement.directions();
             let movement_steps = DistanceManhattan::measure(movement);
 
             if movement_steps == 1
-                && movement_dirs(trivial_dest - old_start).contains(moved_dirs.first().unwrap())
+                && (trivial_dest - old_start)
+                    .directions()
+                    .contains(moved_dirs.first().unwrap())
             {
                 // unwrap: there is exactly one dir
                 // preferred case: single step in good dir, is really easy because of trivial
@@ -121,11 +123,12 @@ impl ScheduledUpdate {
             match self.complexity {
                 UpdateType::TrivialNav => {
                     let movement = new_start - old_start;
-                    let moved_dirs = movement_dirs(movement);
+                    let moved_dirs = movement.directions();
                     let movement_steps = DistanceManhattan::measure(movement);
 
                     if movement_steps == 1
-                        && movement_dirs(trivial_dest - old_start)
+                        && (trivial_dest - old_start)
+                            .directions()
                             .contains(moved_dirs.first().unwrap())
                     {
                         // unwrap: there is exactly one dir
@@ -1378,25 +1381,6 @@ async fn compute<
             Err(NavigatorError::NavigationImpossible)
         }
     }
-}
-
-pub fn movement_dirs(movement: Vec2<Global>) -> Vec<Direction, 2> {
-    let mut v = Vec::<Direction, 2>::new();
-    let mut check_and_add = |dir: Direction| {
-        // unwrap: there can only be two dirs to add
-        v.push(dir).unwrap();
-    };
-    match movement.get(Direction::East) {
-        ..0 => check_and_add(Direction::West),
-        0 => {}
-        1.. => check_and_add(Direction::East),
-    }
-    match movement.get(Direction::North) {
-        ..0 => check_and_add(Direction::South),
-        0 => {}
-        1.. => check_and_add(Direction::North),
-    }
-    v
 }
 
 #[cfg(test)]

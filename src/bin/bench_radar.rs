@@ -99,7 +99,7 @@ async fn bench<Size: RadarSize>(bot: &mut Bot) {
         with_timing("fc2d", (), |_| {
             let mut count = 0;
             for (i1, i2) in Range2d::from_radar::<Size>() {
-                if scan.at(Vec2::new_local(i1.into(), i2.into())) == Some(Tile::Bot)
+                if scan.at(Vec2::new_front_right(i1.into(), i2.into())) == Some(Tile::Bot)
                     && (i1 != 0 || i2 != 0)
                 {
                     count += 1;
@@ -114,7 +114,7 @@ async fn bench<Size: RadarSize>(bot: &mut Bot) {
             let mut count = 0;
             for i1 in Size::range() {
                 for i2 in Size::range() {
-                    if scan.at(Vec2::new_local(i1.into(), i2.into())) == Some(Tile::Bot)
+                    if scan.at(Vec2::new_front_right(i1.into(), i2.into())) == Some(Tile::Bot)
                         && (i1 != 0 || i2 != 0)
                     {
                         count += 1;

@@ -42,6 +42,6 @@ fn main() {
 /// kill bot
 pub fn exit() {
     unsafe {
-        core::ptr::read_volatile(0xFFFF_FFFF as *const u32);
+        core::ptr::read_volatile(0xDEAD_0000 as *const u32);
     }
 }

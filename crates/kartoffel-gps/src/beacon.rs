@@ -1063,10 +1063,10 @@ fn is_navigation_trivial<const BUFFER_SIZE: usize>(
             0 => (),
             1.. => dirs.push(Direction::East).unwrap(),
         }
-        match vector.north() {
-            ..=-1 => dirs.push(Direction::South).unwrap(),
+        match vector.south() {
+            ..=-1 => dirs.push(Direction::North).unwrap(),
             0 => (),
-            1.. => dirs.push(Direction::North).unwrap(),
+            1.. => dirs.push(Direction::South).unwrap(),
         }
         dirs
     };
@@ -1083,14 +1083,14 @@ fn is_navigation_trivial<const BUFFER_SIZE: usize>(
         // dist_man: 4
         // unwrap: all distances are expected to fit in i16
         for i in 1..=i16::try_from(dist_man).unwrap() {
-            if !map.get(start + Vec2::from_direction(dirs[0], i)) {
+            if !map.get(start + Vec2::new_in_direction(dirs[0], i)) {
                 return Ok(false);
             }
         }
         Ok(true)
     } else {
         // unwrap: all distances are expected to fit in i16, vector in dir is nonnegative
-        let max_dir_0 = u16::try_from(vector.get(dirs[0])).unwrap();
+        let max_dir_0 = u16::try_from(vector.in_direction(dirs[0])).unwrap();
         let max_dir_1 = dist_man - max_dir_0;
 
         // out of bounds
@@ -1115,8 +1115,8 @@ fn is_navigation_trivial<const BUFFER_SIZE: usize>(
             let dist_dir_1 = i_manhattan - dist_dir_0;
             // unwrap: distances fit in i16
             start
-                + Vec2::from_direction(dirs[0], i16::try_from(dist_dir_0 - i_index).unwrap())
-                + Vec2::from_direction(dirs[1], i16::try_from(dist_dir_1 + i_index).unwrap())
+                + Vec2::new_in_direction(dirs[0], i16::try_from(dist_dir_0 - i_index).unwrap())
+                + Vec2::new_in_direction(dirs[1], i16::try_from(dist_dir_1 + i_index).unwrap())
         };
 
         let neighbor_indices = |i_manhattan: u16, i_index: u16| {
@@ -1399,7 +1399,7 @@ mod tests {
         SeedableRng,
     };
 
-    use crate::pos::pos_east_north;
+    use crate::pos::pos_east_south;
 
     extern crate alloc;
 
@@ -1441,23 +1441,23 @@ mod tests {
         }
 
         fn corner_north_west(&self) -> GlobalPos {
-            pos_east_north(0, 0)
+            pos_east_south(0, 0)
         }
 
         fn corner_north_east(&self) -> GlobalPos {
-            pos_east_north(WIDTH as i16 - 1, 0)
+            pos_east_south(WIDTH as i16 - 1, 0)
         }
 
         fn corner_south_west(&self) -> GlobalPos {
-            pos_east_north(0, -(HEIGHT as i16) + 1)
+            pos_east_south(0, HEIGHT as i16 - 1)
         }
 
         fn corner_south_east(&self) -> GlobalPos {
-            pos_east_north(WIDTH as i16 - 1, -(HEIGHT as i16) + 1)
+            pos_east_south(WIDTH as i16 - 1, HEIGHT as i16 - 1)
         }
 
         fn set(&mut self, pos: GlobalPos, val: bool) -> Result<(), ()> {
-            let vec = pos.sub_anchor();
+            let vec = pos.subtract_anchor();
             let east = vec.east();
             let south = vec.south();
             if east < 0 || east >= self.width() as i16 || south < 0 || south >= self.height() as i16
@@ -1472,7 +1472,7 @@ mod tests {
 
     impl<const WIDTH: usize, const HEIGHT: usize> TrueMap for TestMap<WIDTH, HEIGHT> {
         fn get(&self, pos: GlobalPos) -> bool {
-            let vec = pos.sub_anchor();
+            let vec = pos.subtract_anchor();
             let east = vec.east();
             let south = vec.south();
             if east < 0 || east >= self.width() as i16 || south < 0 || south >= self.height() as i16
@@ -1573,8 +1573,8 @@ mod tests {
             [true, true, true],
             [true, false, true],
         ]);
-        assert_eq!(map.get(pos_east_north(2, -3)), true);
-        assert_eq!(map.get(pos_east_north(1, -3)), false);
+        assert_eq!(map.get(pos_east_south(2, -3)), true);
+        assert_eq!(map.get(pos_east_south(1, -3)), false);
         assert_eq!(
             is_navigation_trivial::<64>(&map, map.corner_north_west(), map.corner_south_east()),
             Ok(false)
@@ -1594,7 +1594,7 @@ mod tests {
         assert_eq!(map.dirty_outside.get(), false);
 
         assert_eq!(
-            is_navigation_trivial::<64>(&map, map.corner_north_east(), pos_east_north(3, -3)),
+            is_navigation_trivial::<64>(&map, map.corner_north_east(), pos_east_south(3, -3)),
             Ok(false)
         );
         assert_eq!(map.dirty_outside.get(), true);
@@ -1624,7 +1624,7 @@ mod tests {
         for dir in Direction::all() {
             let mut i = 1i16;
             loop {
-                let pos = destination + Vec2::from_direction(dir, i);
+                let pos = destination + Vec2::new_in_direction(dir, i);
                 if map.get(pos) {
                     start.set(pos, true).unwrap();
                     if pos == xx_start {
@@ -1648,16 +1648,18 @@ mod tests {
                 let mut i_manhattan = 2i16;
                 loop {
                     let mut any: bool = false;
-                    any = any || start.get(destination + Vec2::from_direction(dir_ew, i_manhattan));
-                    any = any || start.get(destination + Vec2::from_direction(dir_ns, i_manhattan));
+                    any =
+                        any || start.get(destination + Vec2::new_in_direction(dir_ew, i_manhattan));
+                    any =
+                        any || start.get(destination + Vec2::new_in_direction(dir_ns, i_manhattan));
 
                     for i_ew in 1..=i_manhattan - 1 {
                         let i_ns = i_manhattan - i_ew;
                         let pos = destination
-                            + Vec2::from_direction(dir_ew, i_ew)
-                            + Vec2::from_direction(dir_ns, i_ns);
-                        let neighbor_ew = pos - Vec2::from_direction(dir_ew, 1);
-                        let neighbor_ns = pos - Vec2::from_direction(dir_ns, 1);
+                            + Vec2::new_in_direction(dir_ew, i_ew)
+                            + Vec2::new_in_direction(dir_ns, i_ns);
+                        let neighbor_ew = pos - Vec2::new_in_direction(dir_ew, 1);
+                        let neighbor_ns = pos - Vec2::new_in_direction(dir_ns, 1);
 
                         let walk = map.get(pos);
                         let triv_ns = start.get(neighbor_ns);
@@ -1749,12 +1751,12 @@ mod tests {
                     let mut pos = start;
                     for i in 0..WIDTH + HEIGHT - 2 {
                         let dirs = [dir0, dir1].into_iter().filter(|&dir| {
-                            let new_pos = pos + Vec2::from_direction(dir, 1);
-                            (dest - new_pos).get(dir) >= 0 && map.get(new_pos)
+                            let new_pos = pos + Vec2::new_in_direction(dir, 1);
+                            (dest - new_pos).in_direction(dir) >= 0 && map.get(new_pos)
                         });
                         let dir = dirs.choose(rng);
                         if let Some(dir) = dir {
-                            pos = pos + Vec2::from_direction(dir, 1);
+                            pos = pos + Vec2::new_in_direction(dir, 1);
                         } else {
                             return Err(TestError);
                         }

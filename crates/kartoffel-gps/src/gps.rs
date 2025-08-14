@@ -12,8 +12,8 @@ pub trait MapSectionTrait: Default + Hash + PartialEq + Eq + PartialOrd + Ord + 
     fn from_scan(scan: &RadarScan<Self::Size>, facing: Direction) -> Self {
         let mut ret = Self::default();
         for i_east in Self::Size::range() {
-            for i_north in Self::Size::range() {
-                let vec = Vec2::new_global(i_east.into(), i_north.into());
+            for i_south in Self::Size::range() {
+                let vec = Vec2::new_east_south(i_east.into(), i_south.into());
                 // unwrap: we know vec is in bounds
                 let walkable = scan.at(vec.local(facing)).unwrap().is_walkable_terrain();
                 // unwrap: we know vec is in bounds
@@ -80,10 +80,10 @@ impl MapSectionTrait for MapSection<3> {
             let mut ret = Self::Compressed::default();
             let mut index = 0usize;
             for i_east in Self::Size::range() {
-                for i_north in Self::Size::range() {
-                    if i_east != 0 || i_north != 0 {
+                for i_south in Self::Size::range() {
+                    if i_east != 0 || i_south != 0 {
                         if self
-                            .get(Vec2::new_global(i_east.into(), i_north.into()))
+                            .get(Vec2::new_east_south(i_east.into(), i_south.into()))
                             .unwrap()
                         {
                             ret[index.div_euclid(8)] ^= 1u8 << index.rem_euclid(8);
@@ -102,11 +102,11 @@ impl MapSectionTrait for MapSection<3> {
         let mut ret = Self::default();
         let mut index: usize = 0;
         for i_east in Self::Size::range() {
-            for i_north in Self::Size::range() {
-                if i_east != 0 || i_north != 0 {
+            for i_south in Self::Size::range() {
+                if i_east != 0 || i_south != 0 {
                     let val = compressed[index.div_euclid(8)] & (1u8 << index.rem_euclid(8)) > 0u8;
                     // unwrap: always in bounds
-                    ret.set(Vec2::new_global(i_east.into(), i_north.into()), val)
+                    ret.set(Vec2::new_east_south(i_east.into(), i_south.into()), val)
                         .unwrap();
 
                     index += 1;
@@ -122,7 +122,7 @@ impl MapSectionTrait for MapSection<3> {
         if Self::Size::contains(vec) {
             Ok(
                 self.0[usize::try_from(vec.east() + i16::from(Self::Size::R)).unwrap()]
-                    [usize::try_from(vec.north() + i16::from(Self::Size::R)).unwrap()],
+                    [usize::try_from(vec.south() + i16::from(Self::Size::R)).unwrap()],
             )
         } else {
             Err(OutOfBounds)
@@ -132,7 +132,7 @@ impl MapSectionTrait for MapSection<3> {
     fn set(&mut self, vec: Vec2<Global>, val: bool) -> Result<(), OutOfBounds> {
         if Self::Size::contains(vec) {
             self.0[usize::try_from(vec.east() + i16::from(Self::Size::R)).unwrap()]
-                [usize::try_from(vec.north() + i16::from(Self::Size::R)).unwrap()] = val;
+                [usize::try_from(vec.south() + i16::from(Self::Size::R)).unwrap()] = val;
             Ok(())
         } else {
             Err(OutOfBounds)
@@ -154,10 +154,10 @@ impl MapSectionTrait for MapSection<5> {
             let mut ret = Self::Compressed::default();
             let mut index = 0usize;
             for i_east in Self::Size::range() {
-                for i_north in Self::Size::range() {
-                    if i_east != 0 || i_north != 0 {
+                for i_south in Self::Size::range() {
+                    if i_east != 0 || i_south != 0 {
                         if self
-                            .get(Vec2::new_global(i_east.into(), i_north.into()))
+                            .get(Vec2::new_east_south(i_east.into(), i_south.into()))
                             .unwrap()
                         {
                             ret[index.div_euclid(8)] ^= 1u8 << index.rem_euclid(8);
@@ -176,11 +176,11 @@ impl MapSectionTrait for MapSection<5> {
         let mut ret = Self::default();
         let mut index: usize = 0;
         for i_east in Self::Size::range() {
-            for i_north in Self::Size::range() {
-                if i_east != 0 || i_north != 0 {
+            for i_south in Self::Size::range() {
+                if i_east != 0 || i_south != 0 {
                     let val = compressed[index.div_euclid(8)] & (1u8 << index.rem_euclid(8)) > 0u8;
                     // unwrap: always in bounds
-                    ret.set(Vec2::new_global(i_east.into(), i_north.into()), val)
+                    ret.set(Vec2::new_east_south(i_east.into(), i_south.into()), val)
                         .unwrap();
 
                     index += 1;
@@ -196,7 +196,7 @@ impl MapSectionTrait for MapSection<5> {
         if Self::Size::contains(vec) {
             Ok(
                 self.0[usize::try_from(vec.east() + i16::from(Self::Size::R)).unwrap()]
-                    [usize::try_from(vec.north() + i16::from(Self::Size::R)).unwrap()],
+                    [usize::try_from(vec.south() + i16::from(Self::Size::R)).unwrap()],
             )
         } else {
             Err(OutOfBounds)
@@ -206,7 +206,7 @@ impl MapSectionTrait for MapSection<5> {
     fn set(&mut self, vec: Vec2<Global>, val: bool) -> Result<(), OutOfBounds> {
         if Self::Size::contains(vec) {
             self.0[usize::try_from(vec.east() + i16::from(Self::Size::R)).unwrap()]
-                [usize::try_from(vec.north() + i16::from(Self::Size::R)).unwrap()] = val;
+                [usize::try_from(vec.south() + i16::from(Self::Size::R)).unwrap()] = val;
             Ok(())
         } else {
             Err(OutOfBounds)
@@ -228,10 +228,10 @@ impl MapSectionTrait for MapSection<7> {
             let mut ret = Self::Compressed::default();
             let mut index = 0usize;
             for i_east in Self::Size::range() {
-                for i_north in Self::Size::range() {
-                    if i_east != 0 || i_north != 0 {
+                for i_south in Self::Size::range() {
+                    if i_east != 0 || i_south != 0 {
                         if self
-                            .get(Vec2::new_global(i_east.into(), i_north.into()))
+                            .get(Vec2::new_east_south(i_east.into(), i_south.into()))
                             .unwrap()
                         {
                             ret[index.div_euclid(8)] ^= 1u8 << index.rem_euclid(8);
@@ -250,11 +250,11 @@ impl MapSectionTrait for MapSection<7> {
         let mut ret = Self::default();
         let mut index: usize = 0;
         for i_east in Self::Size::range() {
-            for i_north in Self::Size::range() {
-                if i_east != 0 || i_north != 0 {
+            for i_south in Self::Size::range() {
+                if i_east != 0 || i_south != 0 {
                     let val = compressed[index.div_euclid(8)] & (1u8 << index.rem_euclid(8)) > 0u8;
                     // unwrap: always in bounds
-                    ret.set(Vec2::new_global(i_east.into(), i_north.into()), val)
+                    ret.set(Vec2::new_east_south(i_east.into(), i_south.into()), val)
                         .unwrap();
 
                     index += 1;
@@ -270,7 +270,7 @@ impl MapSectionTrait for MapSection<7> {
         if Self::Size::contains(vec) {
             Ok(
                 self.0[usize::try_from(vec.east() + i16::from(Self::Size::R)).unwrap()]
-                    [usize::try_from(vec.north() + i16::from(Self::Size::R)).unwrap()],
+                    [usize::try_from(vec.south() + i16::from(Self::Size::R)).unwrap()],
             )
         } else {
             Err(OutOfBounds)
@@ -280,7 +280,7 @@ impl MapSectionTrait for MapSection<7> {
     fn set(&mut self, vec: Vec2<Global>, val: bool) -> Result<(), OutOfBounds> {
         if Self::Size::contains(vec) {
             self.0[usize::try_from(vec.east() + i16::from(Self::Size::R)).unwrap()]
-                [usize::try_from(vec.north() + i16::from(Self::Size::R)).unwrap()] = val;
+                [usize::try_from(vec.south() + i16::from(Self::Size::R)).unwrap()] = val;
             Ok(())
         } else {
             Err(OutOfBounds)
@@ -302,10 +302,10 @@ impl MapSectionTrait for MapSection<9> {
             let mut ret = Self::Compressed::default();
             let mut index = 0usize;
             for i_east in Self::Size::range() {
-                for i_north in Self::Size::range() {
-                    if i_east != 0 || i_north != 0 {
+                for i_south in Self::Size::range() {
+                    if i_east != 0 || i_south != 0 {
                         if self
-                            .get(Vec2::new_global(i_east.into(), i_north.into()))
+                            .get(Vec2::new_east_south(i_east.into(), i_south.into()))
                             .unwrap()
                         {
                             ret[index.div_euclid(8)] ^= 1u8 << index.rem_euclid(8);
@@ -324,11 +324,11 @@ impl MapSectionTrait for MapSection<9> {
         let mut ret = Self::default();
         let mut index: usize = 0;
         for i_east in Self::Size::range() {
-            for i_north in Self::Size::range() {
-                if i_east != 0 || i_north != 0 {
+            for i_south in Self::Size::range() {
+                if i_east != 0 || i_south != 0 {
                     let val = compressed[index.div_euclid(8)] & (1u8 << index.rem_euclid(8)) > 0u8;
                     // unwrap: always in bounds
-                    ret.set(Vec2::new_global(i_east.into(), i_north.into()), val)
+                    ret.set(Vec2::new_east_south(i_east.into(), i_south.into()), val)
                         .unwrap();
 
                     index += 1;
@@ -344,7 +344,7 @@ impl MapSectionTrait for MapSection<9> {
         if Self::Size::contains(vec) {
             Ok(
                 self.0[usize::try_from(vec.east() + i16::from(Self::Size::R)).unwrap()]
-                    [usize::try_from(vec.north() + i16::from(Self::Size::R)).unwrap()],
+                    [usize::try_from(vec.south() + i16::from(Self::Size::R)).unwrap()],
             )
         } else {
             Err(OutOfBounds)
@@ -354,7 +354,7 @@ impl MapSectionTrait for MapSection<9> {
     fn set(&mut self, vec: Vec2<Global>, val: bool) -> Result<(), OutOfBounds> {
         if Self::Size::contains(vec) {
             self.0[usize::try_from(vec.east() + i16::from(Self::Size::R)).unwrap()]
-                [usize::try_from(vec.north() + i16::from(Self::Size::R)).unwrap()] = val;
+                [usize::try_from(vec.south() + i16::from(Self::Size::R)).unwrap()] = val;
             Ok(())
         } else {
             Err(OutOfBounds)

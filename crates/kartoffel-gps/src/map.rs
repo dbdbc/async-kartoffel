@@ -17,7 +17,7 @@ impl<const WIDTH: i16, const HEIGHT: i16, const STORE: usize> TrueMap
     for TrueMapImpl<WIDTH, HEIGHT, STORE>
 {
     fn get(&self, pos: GlobalPos) -> bool {
-        let vec = pos.sub_anchor();
+        let vec = pos.subtract_anchor();
         let east = vec.east();
         let south = vec.south();
         if east < 0 || east >= WIDTH || south < 0 || south >= HEIGHT {

@@ -214,7 +214,7 @@ impl<Size: RadarSize> RadarScan<Size> {
     }
     #[inline(always)]
     pub fn to_vec(dx: i8, dy: i8) -> Vec2<Local> {
-        Vec2::new_local(dx.into(), (-dy).into())
+        Vec2::new_front_right((-dy).into(), dx.into())
     }
 
     pub fn contains(&self, vec: Vec2<Local>) -> bool {

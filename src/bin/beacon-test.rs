@@ -50,10 +50,10 @@ async fn main_task(mut bot: Bot) -> ! {
     let navigator = Navigator::new(resources);
 
     let destinations = &[
-        GlobalPos::add_to_anchor(Vec2::new_global(4, -5)),
-        GlobalPos::add_to_anchor(Vec2::new_global(62, -53)),
-        GlobalPos::add_to_anchor(Vec2::new_global(125, -9)),
-        GlobalPos::add_to_anchor(Vec2::new_global(8, -62)),
+        GlobalPos::add_to_anchor(Vec2::new_east_south(4, 5)),
+        GlobalPos::add_to_anchor(Vec2::new_east_south(62, 53)),
+        GlobalPos::add_to_anchor(Vec2::new_east_south(125, 9)),
+        GlobalPos::add_to_anchor(Vec2::new_east_south(8, 62)),
     ];
 
     println!("setting target");
@@ -162,7 +162,7 @@ async fn main_task(mut bot: Bot) -> ! {
                         .directions()
                         .contains(&dir)
                         && scan
-                            .at(Vec2::from_direction(dir, 1).local(facing))
+                            .at(Vec2::new_in_direction(dir, 1).local(facing))
                             .is_some_and(|t| t.is_empty())
                     {
                         match dir - facing {
@@ -258,7 +258,7 @@ fn random_direction<D: RadarSize>(
     let available_directions = Direction::all()
         .into_iter()
         .filter(|&dir| {
-            scan.at(Vec2::from_rotation(dir - facing, 1))
+            scan.at(Vec2::new_from_rotation(dir - facing, 1))
                 .unwrap()
                 .is_empty()
         })

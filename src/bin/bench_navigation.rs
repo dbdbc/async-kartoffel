@@ -30,12 +30,12 @@ fn main() {
 fn print_map(
     map: &impl Map<Terrain>,
     range_east: RangeInclusive<i16>,
-    range_north: RangeInclusive<i16>,
+    range_south: RangeInclusive<i16>,
     markers: impl Fn(Position) -> Option<char>,
 ) {
-    for north in range_north.rev() {
+    for south in range_south {
         for east in range_east.clone() {
-            let pos_print = Position::default() + Vec2::new_global(east, north);
+            let pos_print = Position::default() + Vec2::new_east_south(east, south);
             let ch = match markers(pos_print) {
                 Some(ch) => ch,
                 None => match map.get(pos_print) {
@@ -60,7 +60,7 @@ struct MapDef<T: Map<Terrain>> {
     start_alternative: Option<Position>,
     destination: Position,
     range_east: RangeInclusive<i16>,
-    range_north: RangeInclusive<i16>,
+    range_south: RangeInclusive<i16>,
 }
 
 fn make_map<T: Map<Terrain> + Default>(map_string: &str) -> Result<MapDef<T>, &'static str> {
@@ -133,7 +133,7 @@ fn make_map<T: Map<Terrain> + Default>(map_string: &str) -> Result<MapDef<T>, &'
             start_alternative,
             destination,
             range_east: 0..=east_max,
-            range_north: -south_max..=0,
+            range_south: 0..=south_max,
         }),
         _ => Err("start (@) and destination (x) must both be defined"),
     }
@@ -147,14 +147,14 @@ async fn nav() -> ! {
         start_alternative,
         destination,
         range_east,
-        range_north,
+        range_south,
     } = make_map::<MyMap>(MAP_BIG).unwrap();
-    println!("{:?}\n{:?}", range_east, range_north);
+    println!("{:?}\n{:?}", range_east, range_south);
 
     print_map(
         map.deref(),
         range_east.clone(),
-        range_north.clone(),
+        range_south.clone(),
         |pos| {
             if pos == start {
                 Some('@')
@@ -186,7 +186,7 @@ async fn nav() -> ! {
         print_map(
             map.deref(),
             range_east.clone(),
-            range_north.clone(),
+            range_south.clone(),
             |pos| {
                 if pos == nav.get_state().task().unwrap().from {
                     Some('@')

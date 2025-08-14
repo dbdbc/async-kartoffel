@@ -6,6 +6,6 @@ use crate::GlobalPos;
 pub enum GpsAnchor {}
 impl PositionAnchor for GpsAnchor {}
 
-pub const fn pos_east_north(east: i16, north: i16) -> GlobalPos {
-    GlobalPos::add_to_anchor(Vec2::new_global(east, north))
+pub const fn pos_east_south(east: i16, south: i16) -> GlobalPos {
+    GlobalPos::add_to_anchor(Vec2::new_east_south(east, south))
 }

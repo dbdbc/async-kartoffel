@@ -64,8 +64,8 @@ impl DistanceMeasure for DistanceBotStab {
 pub fn distance_walk_with_rotation(vec: Vec2<Global>, facing: Direction) -> u16 {
     // additional initial rotations not covered by DistBotWalk
     let n_rotations = match (
-        vec.get(facing),
-        vec.get(facing + Rotation::Left).unsigned_abs(),
+        vec.in_direction(facing),
+        vec.in_direction(facing + Rotation::Left).unsigned_abs(),
     ) {
         (..0, 0) => 2,
         (..0, 1..) => 1,

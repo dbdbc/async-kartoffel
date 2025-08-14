@@ -20,7 +20,7 @@ use super::{
 #[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Debug, Hash)]
 pub struct Position<Anchor: PositionAnchor = AnchorDefault> {
     east: i16,
-    north: i16,
+    south: i16,
     _phantom: PhantomData<Anchor>,
 }
 
@@ -28,7 +28,7 @@ impl<Anchor: PositionAnchor> Default for Position<Anchor> {
     fn default() -> Self {
         Self {
             east: 0,
-            north: 0,
+            south: 0,
             _phantom: PhantomData,
         }
     }
@@ -46,8 +46,8 @@ impl<Anchor: PositionAnchor> Position<Anchor> {
 
     /// vector from anchor, anchor is the (0, 0) position
     /// defined because of const
-    pub const fn sub_anchor(self) -> Vec2<Global> {
-        Vec2::new_global(self.east, self.north)
+    pub const fn subtract_anchor(self) -> Vec2<Global> {
+        Vec2::new_east_south(self.east, self.south)
     }
 
     /// vector from anchor, anchor is the (0, 0) position
@@ -55,7 +55,7 @@ impl<Anchor: PositionAnchor> Position<Anchor> {
     pub const fn add_to_anchor(vec: Vec2<Global>) -> Self {
         Self {
             east: vec.east(),
-            north: vec.north(),
+            south: vec.south(),
             _phantom: PhantomData,
         }
     }
@@ -63,7 +63,7 @@ impl<Anchor: PositionAnchor> Position<Anchor> {
 
 impl<Anchor: PositionAnchor> Display for Position<Anchor> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "({}, {})", self.east, self.north)
+        write!(f, "({}, {})", self.east, self.south)
     }
 }
 
@@ -72,7 +72,7 @@ impl<Anchor: PositionAnchor> Add<Vec2<Global>> for Position<Anchor> {
     fn add(self, rhs: Vec2<Global>) -> Self::Output {
         Self {
             east: self.east + rhs.east(),
-            north: self.north + rhs.north(),
+            south: self.south + rhs.south(),
             _phantom: PhantomData,
         }
     }
@@ -83,7 +83,7 @@ impl<Anchor: PositionAnchor> Sub<Vec2<Global>> for Position<Anchor> {
     fn sub(self, rhs: Vec2<Global>) -> Self::Output {
         Self {
             east: self.east - rhs.east(),
-            north: self.north - rhs.north(),
+            south: self.south - rhs.south(),
             _phantom: PhantomData,
         }
     }
@@ -92,7 +92,7 @@ impl<Anchor: PositionAnchor> Sub<Vec2<Global>> for Position<Anchor> {
 impl<Anchor: PositionAnchor> Sub for Position<Anchor> {
     type Output = Vec2<Global>;
     fn sub(self, rhs: Self) -> Self::Output {
-        Vec2::new_global(self.east - rhs.east, self.north - rhs.north)
+        Vec2::new_east_south(self.east - rhs.east, self.south - rhs.south)
     }
 }
 
@@ -101,7 +101,7 @@ impl<Anchor: PositionAnchor> Add<Position<Anchor>> for Vec2<Global> {
     fn add(self, rhs: Position<Anchor>) -> Self::Output {
         Self::Output {
             east: self.east() + rhs.east,
-            north: self.north() + rhs.north,
+            south: self.south() + rhs.south,
             _phantom: PhantomData,
         }
     }

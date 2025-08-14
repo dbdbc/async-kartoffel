@@ -5,7 +5,7 @@ use std::ops::Div;
 use std::path::Path;
 
 use kartoffel_gps::gps::{MapSection, MapSectionTrait};
-use kartoffel_gps::pos::pos_east_north;
+use kartoffel_gps::pos::pos_east_south;
 use kartoffel_gps::GlobalPos;
 use kartoffel_gps_builder::{
     beacon_nav::{build_trivial_navigation_graph, find_beacons, get_beacon_info},
@@ -106,14 +106,14 @@ const NAV_ACTIVE_BUFFER: usize = {};
     for row in 0..map.height {
         let mut row_chars = Vec::new();
         for col in 0..map.width {
-            let pos = pos_east_north(col as i16, -(row as i16));
+            let pos = pos_east_south(col as i16, -(row as i16));
             row_chars.push(if map.get(pos) { '.' } else { '#' });
         }
         map_chars.push(row_chars);
     }
     for pos in beacon_positions.vec() {
-        let row = pos.sub_anchor().south() as usize;
-        let col = pos.sub_anchor().east() as usize;
+        let row = pos.subtract_anchor().south() as usize;
+        let col = pos.subtract_anchor().east() as usize;
         map_chars[row][col] = '*';
     }
     writeln!(file, "// beacons").unwrap();

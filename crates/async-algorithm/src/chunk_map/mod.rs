@@ -27,8 +27,8 @@ impl ChunkIndex {
         self.index
     }
     fn to_vec(self) -> Vec2<Global> {
-        let (east_in_chunk, north_in_chunk) = self.to_indices();
-        Vec2::new_global(east_in_chunk as i16, north_in_chunk as i16)
+        let (east_in_chunk, south_in_chunk) = self.to_indices();
+        Vec2::new_east_south(east_in_chunk as i16, south_in_chunk as i16)
     }
     fn increase_by_one(self) -> Option<Self> {
         assert!(self.index < 64);
@@ -48,7 +48,7 @@ impl Add<ChunkLocation> for ChunkIndex {
     type Output = Position;
 
     fn add(self, rhs: ChunkLocation) -> Self::Output {
-        rhs.south_west_pos() + self.to_vec()
+        rhs.north_west_pos() + self.to_vec()
     }
 }
 
@@ -89,20 +89,20 @@ impl Iterator for IterInChunk {
 }
 impl ExactSizeIterator for IterInChunk {}
 
-/// Chunk south-west corner is at east8 * 8, north8 * 8
+/// Chunk north-west corner is at east8 * 8, south8 * 8
 #[derive(Clone, PartialEq, Eq, Ord, PartialOrd, Hash, Debug, Copy)]
 pub struct ChunkLocation {
     east8: i16,
-    north8: i16,
+    south8: i16,
 }
 impl ChunkLocation {
-    /// this is the 0, 0 (west-south) corner of the chunk
-    pub fn south_west_pos(&self) -> Position {
-        Position::add_to_anchor(Vec2::new_global(8 * self.east8, 8 * self.north8))
+    /// this is the 0, 0 (west-north) corner of the chunk
+    pub fn north_west_pos(&self) -> Position {
+        Position::add_to_anchor(Vec2::new_east_south(8 * self.east8, 8 * self.south8))
     }
     /// minimum distance vec to pos
     pub fn min_dist_to(&self, pos: Position) -> Vec2<Global> {
-        let vec_anchor = pos - self.south_west_pos();
+        let vec_anchor = pos - self.north_west_pos();
         fn dist_relaxed(dist_anchor: i16) -> i16 {
             match dist_anchor {
                 ..0 => dist_anchor,
@@ -111,9 +111,9 @@ impl ChunkLocation {
             }
         }
 
-        Vec2::new_global(
+        Vec2::new_east_south(
             dist_relaxed(vec_anchor.east()),
-            dist_relaxed(vec_anchor.north()),
+            dist_relaxed(vec_anchor.south()),
         )
     }
 }
@@ -123,11 +123,11 @@ pub fn to_chunk_pos(pos: Position) -> (ChunkLocation, ChunkIndex) {
     (
         ChunkLocation {
             east8: vec.east().div_euclid(8),
-            north8: vec.north().div_euclid(8),
+            south8: vec.south().div_euclid(8),
         },
         ChunkIndex::new(
             vec.east().rem_euclid(8) as u8,
-            vec.north().rem_euclid(8) as u8,
+            vec.south().rem_euclid(8) as u8,
         ),
     )
 }

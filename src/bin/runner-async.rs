@@ -589,7 +589,7 @@ async fn background(
                 let Some(&dir) = nav.next_step(pos).all().first() else {
                     break;
                 };
-                pos += Vec2::from_direction(dir, 1);
+                pos += Vec2::new_in_direction(dir, 1);
                 counter = (counter + 1).rem_euclid(range);
                 if counter.rem_euclid(range) == 0 {
                     let Ok(_) = destinations.push(pos) else { break };
@@ -622,12 +622,12 @@ fn print_map(
     map: &impl Map<Terrain>,
     pos: Position,
     range_east: RangeInclusive<i16>,
-    range_north: RangeInclusive<i16>,
+    range_south: RangeInclusive<i16>,
     markers: impl Fn(Position) -> Option<char>,
 ) {
-    for north in range_north.rev() {
+    for south in range_south {
         for east in range_east.clone() {
-            let pos_print = pos + Vec2::new_global(east, north);
+            let pos_print = pos + Vec2::new_east_south(east, south);
             let ch = match markers(pos_print) {
                 Some(ch) => ch,
                 None => match map.get(pos_print) {

@@ -4,7 +4,7 @@
 #![test_runner(test_kartoffel::runner)]
 #![feature(iter_next_chunk)]
 
-use async_algorithm::{DistanceManhattan, DistanceMeasure};
+use async_algorithm::{Breakpoint, DistanceManhattan, DistanceMeasure, StatsDog};
 use async_kartoffel::{
     exit, println, Arm, Bot, Direction, Duration, Instant, Local, Motor, Position, PositionAnchor,
     Radar, RadarScan, RadarSize, Rotation, Tile, Timer, Vec2, D7,
@@ -61,20 +61,18 @@ fn main() {
     > = StaticCell::new();
     static SIGNAL_DESTINATION: StaticCell<Signal<NoopRawMutex, GlobalPos>> = StaticCell::new();
     static SIGNAL_RESET: StaticCell<Signal<NoopRawMutex, ()>> = StaticCell::new();
+    static SIGNAL_COMPLETE: StaticCell<Signal<NoopRawMutex, ()>> = StaticCell::new();
 
     let channel_position = CHANNEL_POSITION.init(Channel::new());
     let signal_navigation = SIGNAL_NAVIGATION.init(Signal::new());
     let signal_destination = SIGNAL_DESTINATION.init(Signal::new());
     let signal_reset = SIGNAL_RESET.init(Signal::new());
+    let signal_complete = SIGNAL_COMPLETE.init(Signal::new());
 
     let executor = EXECUTOR.init(Executor::new());
 
     println!("async_kartoffel");
     println!("gps navigation test");
-    // println!("7 synchronized");
-    // println!("bot score 3 back bots len 0x4");
-    // println!("terrain back against wall");
-    // println!("\n\n");
 
     executor.run(|spawner| {
         spawner
@@ -86,6 +84,7 @@ fn main() {
                     signal_destination,
                     signal_reset,
                 },
+                signal_complete,
             ))
             .unwrap();
         spawner
@@ -96,6 +95,7 @@ fn main() {
                 signal_reset,
             }))
             .unwrap();
+        spawner.spawn(watchdog(signal_complete)).unwrap();
     })
 }
 
@@ -534,7 +534,7 @@ fn value_function(
     _stab: bool,
     bot_eval: u8,
     wall_eval: i8,
-    bots_empty: bool,
+    _bots_empty: bool,
     nav_eval: NavigationEvaluation,
     pos_known: bool,
 ) -> (u8, i8, i8, bool, bool) {
@@ -648,10 +648,10 @@ impl BotNavState {
                 if sync.channel_position.is_full() {
                     sync.channel_position.clear();
                     sync.channel_position.send(global_pos).await;
-                    println!(">>p clear {}", global_pos);
+                    // println!(">>p clear {}", global_pos);
                 } else {
                     sync.channel_position.send(global_pos).await;
-                    println!(">>p {}", global_pos);
+                    // println!(">>p {}", global_pos);
                 }
                 self.last_pos_synced = Some(global_pos);
             }
@@ -681,7 +681,7 @@ impl BotNavState {
             match update {
                 Ok(section) => {
                     self.navigation_section = Some(section);
-                    println!("<<n {} {}", section.start, section.trivial_dest);
+                    // println!("<<n {} {}", section.start, section.trivial_dest);
                 }
                 Err(err) => println!("nav err: {:?}", err),
             }
@@ -698,7 +698,11 @@ impl BotNavState {
 }
 
 #[task]
-async fn foreground(mut bot: Bot, sync: DataSync) -> ! {
+async fn foreground(
+    mut bot: Bot,
+    sync: DataSync,
+    signal_complete: &'static Signal<NoopRawMutex, ()>,
+) -> ! {
     // settings
     const MAX_N_BOTS: usize = 28;
 
@@ -726,6 +730,7 @@ async fn foreground(mut bot: Bot, sync: DataSync) -> ! {
 
         if nav_state.global_pos == Some(destination) {
             println!("-- done --");
+            signal_complete.signal(());
             Timer::after_secs(2).await;
             exit();
         }
@@ -922,6 +927,20 @@ async fn navigation(sync: DataSync) -> ! {
                 .await
             }
             NavigatorEnum::Invalid => unreachable!(),
+        }
+    }
+}
+
+#[task]
+async fn watchdog(signal_complete: &'static Signal<NoopRawMutex, ()>) -> ! {
+    let mut dog = StatsDog::new();
+    loop {
+        dog.restart_timer();
+        Breakpoint::new().await;
+        dog.feed();
+
+        if signal_complete.try_take().is_some() {
+            println!("{}", dog);
         }
     }
 }

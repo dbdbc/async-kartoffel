@@ -10,7 +10,7 @@ pub type PosGraph<'s, 'd> = Graph<GlobalPos, GlobalPos, &'s PositionBiMap, &'d P
 
 fn distance(a: GlobalPos, b: GlobalPos) -> u16 {
     let v = a - b;
-    v.east().unsigned_abs() + v.north().unsigned_abs()
+    v.east().unsigned_abs() + v.south().unsigned_abs()
 }
 
 /// Trivial navigable means: No matter where you go, if the general direction is correct, you will
@@ -31,7 +31,7 @@ pub fn get_trivial_navigables(map: &Map, destination: GlobalPos) -> Vec<GlobalPo
     for dir in Direction::all() {
         let mut i = 1i16;
         loop {
-            let pos = destination + Vec2::from_direction(dir, i);
+            let pos = destination + Vec2::new_in_direction(dir, i);
             if map.get(pos) {
                 start.set(pos, true).unwrap();
                 ret.push(pos);
@@ -53,16 +53,16 @@ pub fn get_trivial_navigables(map: &Map, destination: GlobalPos) -> Vec<GlobalPo
             let mut i_manhattan = 2i16;
             loop {
                 let mut any: bool = false;
-                any = any || start.get(destination + Vec2::from_direction(dir_ew, i_manhattan));
-                any = any || start.get(destination + Vec2::from_direction(dir_ns, i_manhattan));
+                any = any || start.get(destination + Vec2::new_in_direction(dir_ew, i_manhattan));
+                any = any || start.get(destination + Vec2::new_in_direction(dir_ns, i_manhattan));
 
                 for i_ew in 1..=i_manhattan - 1 {
                     let i_ns = i_manhattan - i_ew;
                     let pos = destination
-                        + Vec2::from_direction(dir_ew, i_ew)
-                        + Vec2::from_direction(dir_ns, i_ns);
-                    let neighbor_ew = pos - Vec2::from_direction(dir_ew, 1);
-                    let neighbor_ns = pos - Vec2::from_direction(dir_ns, 1);
+                        + Vec2::new_in_direction(dir_ew, i_ew)
+                        + Vec2::new_in_direction(dir_ns, i_ns);
+                    let neighbor_ew = pos - Vec2::new_in_direction(dir_ew, 1);
+                    let neighbor_ns = pos - Vec2::new_in_direction(dir_ns, 1);
 
                     let walk = map.get(pos);
                     let triv_ns = start.get(neighbor_ns);

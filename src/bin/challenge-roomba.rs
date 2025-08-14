@@ -386,7 +386,7 @@ async fn background(
                         .next_step(scan_pos)
                         .all()
                         .first()
-                        .map_or(Vec2::default(), |&dir| Vec2::from_direction(dir, 1)),
+                        .map_or(Vec2::default(), |&dir| Vec2::new_in_direction(dir, 1)),
             );
         }
     }

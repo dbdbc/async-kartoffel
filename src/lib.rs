@@ -19,9 +19,9 @@ include!(concat!(env!("OUT_DIR"), "/codegen.rs"));
 
 pub fn get_global_pos(chunk: &MapSection<CHUNK_SIZE>) -> Option<GlobalPos> {
     let (east, south) = UNIQUE_CHUNKS.get(chunk.compress()?.as_ref()).cloned()?;
-    Some(GlobalPos::add_to_anchor(Vec2::new_global(
-        i16::from(east),
-        -i16::from(south),
+    Some(GlobalPos::add_to_anchor(Vec2::new_east_south(
+        east.into(),
+        south.into(),
     )))
 }
 

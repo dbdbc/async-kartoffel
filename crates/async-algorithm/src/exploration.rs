@@ -206,8 +206,8 @@ impl<const N: usize, T: Map<Terrain>> Exploration<N, T> {
             State::Ready => (),
             State::Running(progress) => {
                 for i_east in Size::range() {
-                    for i_north in Size::range() {
-                        let pos = center + Vec2::new_global(i_east.into(), i_north.into());
+                    for i_south in Size::range() {
+                        let pos = center + Vec2::new_east_south(i_east.into(), i_south.into());
                         if progress.stale.remove(&pos) {
                             progress.active.push(pos).map_err(|_| OutOfMemory)?;
                         }
@@ -216,8 +216,8 @@ impl<const N: usize, T: Map<Terrain>> Exploration<N, T> {
             }
             State::Halted(progress) => {
                 for i_east in Size::range() {
-                    for i_north in Size::range() {
-                        let pos = center + Vec2::new_global(i_east.into(), i_north.into());
+                    for i_south in Size::range() {
+                        let pos = center + Vec2::new_east_south(i_east.into(), i_south.into());
                         if progress.stale.remove(&pos) {
                             progress.active.push(pos).map_err(|_| OutOfMemory)?;
                         }

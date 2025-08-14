@@ -109,7 +109,7 @@ impl Chunk<Terrain> for ChunkTerrain {
 }
 
 impl ChunkTerrain {
-    /// center: relative to south west corner (0, 0 - corner in in_chunk coords)
+    /// center: relative to north west corner (0, 0 - corner in in_chunk coords)
     /// Fails if a tile would be changed from an already known state. This can happen, if we tried
     /// to walked into another bot, and is probably really annoying to repair.
     async fn update_from_radar<Size: RadarSize>(
@@ -122,14 +122,14 @@ impl ChunkTerrain {
         let mut new_self = self.clone();
         let mut map_changed = false;
         for east in (center.east() - r).clamp(0, 7)..=(center.east() + r).clamp(0, 7) {
-            for north in (center.north() - r).clamp(0, 7)..=(center.north() + r).clamp(0, 7) {
-                let vec_from_center = Vec2::new_global(east, north) - center;
+            for south in (center.south() - r).clamp(0, 7)..=(center.south() + r).clamp(0, 7) {
+                let vec_from_center = Vec2::new_east_south(east, south) - center;
                 // unwrap okay, because we ensured it is in radar range
                 let walkable = radar
                     .at(vec_from_center.local(direction))
                     .unwrap()
                     .is_walkable_terrain();
-                let in_chunk_index = ChunkIndex::new(east as u8, north as u8);
+                let in_chunk_index = ChunkIndex::new(east as u8, south as u8);
                 match new_self.get(in_chunk_index).is_walkable() {
                     None => new_self.set(in_chunk_index, Terrain::from_walkable(walkable)),
                     Some(current_walkable) => {
@@ -153,7 +153,7 @@ pub async fn update_chunk_map<M: ChunkMap<Terrain, ChunkTerrain>, Size: RadarSiz
     pos: Position,
     direction: Direction,
 ) -> Result<(), MapError> {
-    let vec = Vec2::new_global(Size::R as i16, Size::R as i16);
+    let vec = Vec2::new_east_south(Size::R as i16, Size::R as i16);
     // unique chunks, since maximum scan size is 9 the scan is guaranteed to fit into 4 chunks
     let locations: FnvIndexSet<ChunkLocation, 4> = Rotation::all()
         .into_iter()
@@ -163,7 +163,7 @@ pub async fn update_chunk_map<M: ChunkMap<Terrain, ChunkTerrain>, Size: RadarSiz
     let mut results = Vec::<ChunkTerrain, 4>::new();
     for &location in locations.iter() {
         let chunk = map.get_chunk_mut_or_new(location)?;
-        let in_chunk_coords = pos - location.south_west_pos();
+        let in_chunk_coords = pos - location.north_west_pos();
         let updated = chunk
             .update_from_radar(radar, in_chunk_coords, direction)
             .await?;

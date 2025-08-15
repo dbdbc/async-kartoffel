@@ -4,8 +4,28 @@ use embassy_futures::select::{select, Either};
 
 use async_kartoffel::{Duration, Instant};
 
-use super::{isqrt, Breakpoint};
+use super::Breakpoint;
 
+/// A watchdog-like utility that can e.g. be used to track how often a certain Future is polled.
+///
+/// ```no_run
+/// async fn with_watchdog() {
+///     let mut dog = StatsDog::new();
+///     loop {
+///         let elapsed = dog.feed();
+///         if elapsed > Duration::from_ticks(20_000) {
+///             println!("warning: blocked {}", elapsed);
+///         }
+///
+///         let completed: bool;
+///         // do something
+///
+///         if completed {
+///             println!("{}", dog);
+///         }
+///     }
+/// }
+/// ```
 pub struct StatsDog {
     sum_duration: Duration,
     counter: u32,
@@ -48,7 +68,8 @@ impl StatsDog {
             self.feed();
         }
     }
-    pub fn feed(&mut self) {
+    /// resets the timer, and adds the elapsed time to the gathered statistics
+    pub fn feed(&mut self) -> Duration {
         let now = Instant::now();
         let duration = (now - self.last_time).unwrap();
 
@@ -59,6 +80,8 @@ impl StatsDog {
         self.sum_sq_duration += u64::from(duration.as_ticks()).pow(2);
 
         self.restart_timer();
+
+        duration
     }
     pub fn restart_timer(&mut self) {
         self.last_time = Instant::now();
@@ -72,15 +95,15 @@ impl StatsDog {
     pub fn total(&self) -> Duration {
         self.sum_duration
     }
+    /// empirical standard deviation
     pub fn std(&self) -> u32 {
         // std = 1 / (N - 1) * sum((x - µ)^2)
         //     = 1 / (N - 1) * (sum(x^2) - 2 sum(x) µ + N µ^2)
         //     = 1 / (N - 1) * (sum(x^2) - N µ^2)
-        isqrt(
-            (self.sum_sq_duration
-                - u64::from(self.sum_duration.as_ticks()).pow(2) / u64::from(self.counter))
-                / (u64::from(self.counter) - 1),
-        ) as u32
+        ((self.sum_sq_duration
+            - u64::from(self.sum_duration.as_ticks()).pow(2) / u64::from(self.counter))
+            / (u64::from(self.counter) - 1))
+            .isqrt() as u32
     }
 }
 impl Display for StatsDog {

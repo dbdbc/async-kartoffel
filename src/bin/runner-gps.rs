@@ -23,35 +23,6 @@ use static_cell::StaticCell;
 
 extern crate alloc;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
-struct NavigationSection {
-    trivial_dest: GlobalPos,
-    start: GlobalPos,
-}
-
-impl NavigationSection {
-    /// update if new position is available, only handles trivial navigation (= right direction single step)
-    /// updates
-    fn update(self_: &mut Option<Self>, pos: GlobalPos) {
-        if let Some(section) = self_ {
-            let movement = pos - section.start;
-            let dist = DistanceManhattan::measure(movement);
-            if dist == 1
-                && (section.trivial_dest - section.start)
-                    .directions()
-                    .contains(movement.directions().first().unwrap())
-            {
-                // single step in the right direction keep trivial navigation invariant
-                section.start = pos;
-            }
-        }
-    }
-
-    fn directions(&self) -> &'static [Direction] {
-        (self.trivial_dest - self.start).directions()
-    }
-}
-
 #[no_mangle]
 fn main() {
     static EXECUTOR: StaticCell<Executor> = StaticCell::new();
@@ -97,6 +68,35 @@ fn main() {
             .unwrap();
         spawner.spawn(watchdog(signal_complete)).unwrap();
     })
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+struct NavigationSection {
+    trivial_dest: GlobalPos,
+    start: GlobalPos,
+}
+
+impl NavigationSection {
+    /// update if new position is available, only handles trivial navigation (= right direction single step)
+    /// updates
+    fn update(self_: &mut Option<Self>, pos: GlobalPos) {
+        if let Some(section) = self_ {
+            let movement = pos - section.start;
+            let dist = DistanceManhattan::measure(movement);
+            if dist == 1
+                && (section.trivial_dest - section.start)
+                    .directions()
+                    .contains(movement.directions().first().unwrap())
+            {
+                // single step in the right direction to keep trivial navigation invariant
+                section.start = pos;
+            }
+        }
+    }
+
+    fn directions(&self) -> &'static [Direction] {
+        (self.trivial_dest - self.start).directions()
+    }
 }
 
 /// translation is given in original coordinates, so not rotated yet
@@ -937,7 +937,11 @@ async fn watchdog(signal_complete: &'static Signal<NoopRawMutex, ()>) -> ! {
     loop {
         dog.restart_timer();
         Breakpoint::new().await;
-        dog.feed();
+        let _elapsed = dog.feed();
+
+        // if _elapsed > Duration::from_ticks(32_000) {
+        //     println!("W: blocked {}", elapsed);
+        // }
 
         if signal_complete.try_take().is_some() {
             println!("{}", dog);

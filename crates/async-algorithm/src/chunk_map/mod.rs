@@ -5,7 +5,6 @@ use async_kartoffel::{Global, Position, Vec2};
 use crate::error::OutOfMemory;
 
 pub mod hash;
-pub mod rolling;
 
 /// Location in chunk, between (0, 0)..=(7, 7)
 #[derive(Clone, PartialEq, Eq, Ord, PartialOrd, Hash, Debug, Copy)]

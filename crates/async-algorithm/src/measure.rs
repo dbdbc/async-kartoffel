@@ -32,6 +32,7 @@ impl DistanceMeasure for DistanceManhattan {
     }
 }
 #[derive(Clone)]
+/// how long does it take for the bot to walk this distance, in 5k clock cycles, minimum
 pub enum DistanceBotWalk {}
 impl DistanceMeasure for DistanceBotWalk {
     fn measure<C: Coords>(vec: Vec2<C>) -> u16 {
@@ -39,13 +40,14 @@ impl DistanceMeasure for DistanceBotWalk {
         let (d0, d1) = (d0.unsigned_abs(), d1.unsigned_abs());
         let (max, min) = if d0 >= d1 { (d0, d1) } else { (d1, d0) };
         if min == 0 {
-            max * 2 // forward
+            max * 4 // forward
         } else {
-            max * 2 + 1 + min * 2 // forward, turn, forward
+            max * 4 + 5 + min * 4 // forward, turn, forward
         }
     }
 }
 #[derive(Clone)]
+/// how long does it take for the bot to stab a bot this far away, in 5k clock cycles, minimum
 pub enum DistanceBotStab {}
 impl DistanceMeasure for DistanceBotStab {
     fn measure<C: Coords>(vec: Vec2<C>) -> u16 {
@@ -53,14 +55,15 @@ impl DistanceMeasure for DistanceBotStab {
         let (d0, d1) = (d0.unsigned_abs(), d1.unsigned_abs());
         let (max, min) = if d0 >= d1 { (d0, d1) } else { (d1, d0) };
         if min == 0 {
-            (max * 2).saturating_sub(4) // forward
+            (max * 4).saturating_sub(8) // forward
         } else {
-            (max * 2 + 1 + min * 2).saturating_sub(4) // forward, turn, forward
+            (max * 4 + 5 + min * 4).saturating_sub(8) // forward, turn, forward
         }
     }
 }
 
-/// how many 10k clock cycles does a bot looking at facing require to walk to vec
+/// how many 5k clock cycles does a bot facing a certain direction require to walk to vec
+/// moving backwards is not accounted for
 pub fn distance_walk_with_rotation(vec: Vec2<Global>, facing: Direction) -> u16 {
     // additional initial rotations not covered by DistBotWalk
     let n_rotations = match (
@@ -74,5 +77,5 @@ pub fn distance_walk_with_rotation(vec: Vec2<Global>, facing: Direction) -> u16 
         (1.., _) => 0,
     };
 
-    n_rotations + DistanceBotWalk::measure(vec)
+    5 * n_rotations + DistanceBotWalk::measure(vec)
 }

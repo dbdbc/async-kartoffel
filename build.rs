@@ -19,7 +19,7 @@ fn main() {
     let path = Path::new(&env::var("OUT_DIR").unwrap()).join("codegen.rs");
     let file = &mut BufWriter::new(File::create(&path).unwrap());
 
-    let map_path = "maps/map.txt";
+    let map_path = "maps/map-grotta.txt";
     println!("build.rs analysing map {}", map_path);
     println!("cargo::rerun-if-changed={}", map_path);
     let map = &Map::from_path(Path::new(map_path)).unwrap();

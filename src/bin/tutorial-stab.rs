@@ -5,7 +5,7 @@ use async_kartoffel::{println, Bot, Duration, Timer, Vec2, D3};
 use embassy_executor::{task, Executor};
 use static_cell::StaticCell;
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 fn main() {
     static EXECUTOR: StaticCell<Executor> = StaticCell::new();
     let executor = EXECUTOR.init(Executor::new());

@@ -10,8 +10,8 @@ members = [
 ]
 
 [workspace.package]
-edition = "2021"
-version = "0.7.0"
+edition = "2024"
+version = "0.7.1"
 
 [workspace.dependencies]
 kartoffel = { git = "https://github.com/Patryk27/kartoffels", default-features = false }

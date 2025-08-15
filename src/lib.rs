@@ -1,14 +1,25 @@
 #![no_std]
+#![no_main]
+#![feature(custom_test_frameworks)]
+#![reexport_test_harness_main = "test_main"]
+#![test_runner(test_kartoffel::runner)]
+
+#[cfg(test)]
+#[unsafe(no_mangle)]
+fn main() {
+    // test_main(); // TODO
+    loop {}
+}
 
 extern crate alloc;
 
 use kartoffel_gps::{
+    GlobalPos,
     beacon::{BeaconInfo, NavigatorResources, NavigatorResourcesImpl},
     const_graph::Graph,
     gps::{MapSection, MapSectionTrait},
     map::TrueMap,
     pos::pos_east_south,
-    GlobalPos,
 };
 
 const CHUNK_SIZE: usize = 7;
@@ -20,8 +31,8 @@ pub fn get_global_pos(chunk: &MapSection<CHUNK_SIZE>) -> Option<GlobalPos> {
     Some(pos_east_south(east.into(), south.into()))
 }
 
-pub fn global_pos_entries(
-) -> impl Iterator<Item = &'static <MapSection<CHUNK_SIZE> as MapSectionTrait>::Compressed> {
+pub fn global_pos_entries()
+-> impl Iterator<Item = &'static <MapSection<CHUNK_SIZE> as MapSectionTrait>::Compressed> {
     UNIQUE_CHUNKS.keys()
 }
 

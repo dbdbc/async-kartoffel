@@ -11,7 +11,7 @@ use kartoffel::println;
 extern crate alloc;
 
 #[cfg(test)]
-#[no_mangle]
+#[unsafe(no_mangle)]
 fn main() {
     test_main();
     loop {}
@@ -61,7 +61,7 @@ pub fn runner(tests: &[&dyn MyTest]) {
 
 #[macro_export]
 macro_rules! assert_err {
-    ($t1:expr, $t2: expr) => {{
+    ($t1:expr_2021, $t2: expr_2021) => {{
         match $t1 {
             Err(err) => {
                 if err != $t2 {
@@ -74,7 +74,7 @@ macro_rules! assert_err {
 }
 #[macro_export]
 macro_rules! assert_none {
-    ($t:expr) => {{
+    ($t:expr_2021) => {{
         match $t {
             None => (),
             Some(_) => return Err(TestError),
@@ -83,7 +83,7 @@ macro_rules! assert_none {
 }
 #[macro_export]
 macro_rules! assert_eq {
-    ($t1:expr, $t2:expr) => {{
+    ($t1:expr_2021, $t2:expr_2021) => {{
         if $t1 != $t2 {
             return Err(TestError);
         }
@@ -91,7 +91,7 @@ macro_rules! assert_eq {
 }
 #[macro_export]
 macro_rules! assert {
-    ($t:expr) => {{
+    ($t:expr_2021) => {{
         if !$t {
             return Err(TestError);
         }
@@ -99,7 +99,7 @@ macro_rules! assert {
 }
 #[macro_export]
 macro_rules! result_unwrap {
-    ($t:expr) => {{
+    ($t:expr_2021) => {{
         if let Ok(val) = $t {
             val
         } else {
@@ -109,7 +109,7 @@ macro_rules! result_unwrap {
 }
 #[macro_export]
 macro_rules! option_unwrap {
-    ($t:expr) => {{
+    ($t:expr_2021) => {{
         if let Some(val) = $t {
             val
         } else {

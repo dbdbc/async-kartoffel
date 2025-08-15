@@ -15,7 +15,7 @@ use static_cell::StaticCell;
 
 extern crate alloc;
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 fn main() {
     static EXECUTOR: StaticCell<Executor> = StaticCell::new();
 

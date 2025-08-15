@@ -18,7 +18,7 @@ pub mod pos;
 pub type GlobalPos = Position<GpsAnchor>;
 
 #[cfg(all(test, feature = "test-kartoffel"))]
-#[no_mangle]
+#[unsafe(no_mangle)]
 fn main() {
     test_main();
     loop {}

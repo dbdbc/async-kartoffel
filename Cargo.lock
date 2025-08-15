@@ -10,7 +10,7 @@ checksum = "6b964d184e89d9b6b67dd2715bc8e74cf3107fb2b529990c90cf517326150bf4"
 
 [[package]]
 name = "async-algorithm"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "async-kartoffel",
  "embassy-futures",
@@ -20,7 +20,7 @@ dependencies = [
 
 [[package]]
 name = "async-kartoffel"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "critical-section",
  "heapless",
@@ -168,7 +168,7 @@ checksum = "877a4ace8713b0bcf2a4e7eec82529c029f1d0619886d18145fea96c3ffe5c0f"
 
 [[package]]
 name = "example-kartoffels"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "async-algorithm",
  "async-kartoffel",
@@ -622,7 +622,7 @@ dependencies = [
 
 [[package]]
 name = "test-kartoffel"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "kartoffel",
 ]

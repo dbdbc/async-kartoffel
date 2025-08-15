@@ -11,7 +11,7 @@ use core::{
     task::{Poll, Waker},
 };
 
-use super::{error::RadarError, Singleton};
+use super::{Singleton, error::RadarError};
 
 #[non_exhaustive]
 pub struct Radar;
@@ -112,10 +112,10 @@ impl Guard {
         Self::with_critical_section(|guard| {
             assert!(guard.n_scans > 0);
             guard.n_scans -= 1;
-            if guard.n_scans == 0 {
-                if let Some(waker) = guard.waker.take() {
-                    waker.wake()
-                }
+            if guard.n_scans == 0
+                && let Some(waker) = guard.waker.take()
+            {
+                waker.wake()
             }
         })
     }
@@ -313,7 +313,7 @@ mod tests {
 
     use super::*;
     use test_kartoffel::{
-        assert, assert_eq, assert_err, assert_none, option_unwrap, result_unwrap, TestError,
+        TestError, assert, assert_eq, assert_err, assert_none, option_unwrap, result_unwrap,
     };
 
     #[test_case]

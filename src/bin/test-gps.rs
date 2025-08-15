@@ -10,7 +10,7 @@ use example_kartoffels::{get_global_pos, global_pos_entries};
 use kartoffel_gps::gps::{MapSection, MapSectionTrait};
 use static_cell::StaticCell;
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 fn main() {
     static EXECUTOR: StaticCell<Executor> = StaticCell::new();
     let executor = EXECUTOR.init(Executor::new());

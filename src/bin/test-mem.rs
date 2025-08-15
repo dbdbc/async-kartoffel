@@ -1,12 +1,15 @@
 #![no_main]
 #![no_std]
+#![feature(custom_test_frameworks)]
+#![test_runner(test_kartoffel::runner)]
+#![feature(iter_next_chunk)]
 
 use alloc::boxed::Box;
 use async_kartoffel::println;
 
 extern crate alloc;
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 fn main() {
     // stack overflow error:
     // firmware crashed: invalid access on 0x000ffffc+4

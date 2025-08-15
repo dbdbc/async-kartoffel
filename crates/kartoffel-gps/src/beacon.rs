@@ -1197,8 +1197,8 @@ async fn compute<
         .beacons
         .iter()
         .enumerate()
-        .filter(|(_, &pos)| DistanceManhattan::measure(pos - start) <= context.max_beacon_dist)
-        .filter(|(_, &pos)| {
+        .filter(|&(_, &pos)| DistanceManhattan::measure(pos - start) <= context.max_beacon_dist)
+        .filter(|&(_, &pos)| {
             // possible OutOfMemory error ignored here, but thats ok because it can only appear
             // if TRIV_BUFFER is misconfigured
             is_navigation_trivial::<TRIV_BUFFER>(context.map, start, pos).is_ok_and(identity)
@@ -1213,10 +1213,10 @@ async fn compute<
         .beacons
         .iter()
         .enumerate()
-        .filter(|(_, &pos)| {
+        .filter(|&(_, &pos)| {
             DistanceManhattan::measure(destination - pos) <= context.max_beacon_dist
         })
-        .filter(|(_, &pos)| {
+        .filter(|&(_, &pos)| {
             is_navigation_trivial::<TRIV_BUFFER>(context.map, pos, destination).unwrap()
         }) // TODO unwrap
         .map(|(index, _)| u16::try_from(index).unwrap())
@@ -1357,7 +1357,7 @@ async fn compute<
         Breakpoint::new().await;
 
         // path collection
-        if let Some((_cost, mut parent_node)) = &node_info_destination {
+        if let &Some((ref _cost, mut parent_node)) = &node_info_destination {
             loop {
                 match parent_node {
                     Node::Start => break,
@@ -1387,8 +1387,8 @@ async fn compute<
 mod tests {
 
     use core::{
-        cell::Cell,
         fmt::{Display, Write},
+        sync::atomic::{AtomicBool, Ordering},
     };
 
     use async_kartoffel::{print, println, Global};
@@ -1410,7 +1410,7 @@ mod tests {
 
     struct TestMap<const WIDTH: usize, const HEIGHT: usize> {
         tiles: [[bool; WIDTH]; HEIGHT],
-        dirty_outside: Cell<bool>,
+        dirty_outside: AtomicBool,
     }
 
     impl<const WIDTH: usize, const HEIGHT: usize> Display for TestMap<WIDTH, HEIGHT> {
@@ -1429,14 +1429,14 @@ mod tests {
         fn new_like(&self) -> Self {
             Self {
                 tiles: [[false; WIDTH]; HEIGHT],
-                dirty_outside: Cell::new(false),
+                dirty_outside: AtomicBool::new(false),
             }
         }
 
         fn new(tiles: [[bool; WIDTH]; HEIGHT]) -> Self {
             Self {
                 tiles,
-                dirty_outside: Cell::new(false),
+                dirty_outside: AtomicBool::new(false),
             }
         }
 
@@ -1477,7 +1477,7 @@ mod tests {
             let south = vec.south();
             if east < 0 || east >= self.width() as i16 || south < 0 || south >= self.height() as i16
             {
-                self.dirty_outside.set(true);
+                self.dirty_outside.store(true, Ordering::Relaxed);
                 false
             } else {
                 self.tiles[south as usize][east as usize]
@@ -1528,7 +1528,7 @@ mod tests {
             is_navigation_trivial::<64>(&map, map.corner_north_east(), map.corner_south_west()),
             Ok(true)
         );
-        assert_eq!(map.dirty_outside.get(), false);
+        assert_eq!(map.dirty_outside.load(Ordering::Relaxed), false);
 
         Ok(())
     }
@@ -1559,7 +1559,7 @@ mod tests {
             is_navigation_trivial::<64>(&map, map.corner_north_east(), map.corner_south_west()),
             Ok(false)
         );
-        assert_eq!(map.dirty_outside.get(), false);
+        assert_eq!(map.dirty_outside.load(Ordering::Relaxed), false);
 
         Ok(())
     }
@@ -1591,13 +1591,13 @@ mod tests {
             is_navigation_trivial::<64>(&map, map.corner_north_east(), map.corner_south_west()),
             Ok(false)
         );
-        assert_eq!(map.dirty_outside.get(), false);
+        assert_eq!(map.dirty_outside.load(Ordering::Relaxed), false);
 
         assert_eq!(
             is_navigation_trivial::<64>(&map, map.corner_north_east(), pos_east_south(3, -3)),
             Ok(false)
         );
-        assert_eq!(map.dirty_outside.get(), true);
+        assert_eq!(map.dirty_outside.load(Ordering::Relaxed), true);
 
         Ok(())
     }

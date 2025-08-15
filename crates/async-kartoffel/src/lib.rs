@@ -33,7 +33,7 @@ pub fn random_seed() -> u32 {
 }
 
 #[cfg(all(test, feature = "test-kartoffel"))]
-#[no_mangle]
+#[unsafe(no_mangle)]
 fn main() {
     test_main();
     loop {}

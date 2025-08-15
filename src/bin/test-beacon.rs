@@ -19,7 +19,7 @@ use kartoffel_gps::{
 use rand::{rngs::SmallRng, seq::IndexedRandom, SeedableRng};
 use static_cell::StaticCell;
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 fn main() {
     static EXECUTOR: StaticCell<Executor> = StaticCell::new();
     let executor = EXECUTOR.init(Executor::new());

@@ -2,7 +2,7 @@
 // has one thread, they don't need to do anything.
 // https://docs.rs/critical-section/latest/critical_section/#providing-an-implementation
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 fn _critical_section_1_0_release() {}
-#[no_mangle]
+#[unsafe(no_mangle)]
 fn _critical_section_1_0_acquire() {}

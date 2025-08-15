@@ -45,7 +45,7 @@ impl Drop for DropTimer<'_> {
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 fn main() {
     static EXECUTOR: StaticCell<Executor> = StaticCell::new();
     static BOT: StaticCell<Bot> = StaticCell::new();
@@ -484,12 +484,13 @@ async fn background(
             // let _t = DropTimer::new("t000");
             if let Some(radar_scan) = scan.upgrade() {
                 {
-                    let _t = DropTimer::new("tmap");
+                    let t = DropTimer::new("tmap");
                     if let Err(err) =
                         update_chunk_map(map.deref_mut(), &radar_scan, scan_pos, direction).await
                     {
                         println!("error in map {:?}", err);
                     }
+                    drop(t);
                 }
                 Breakpoint::new().await;
                 {

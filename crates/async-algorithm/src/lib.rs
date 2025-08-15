@@ -5,7 +5,7 @@
 #![cfg_attr(feature = "test-kartoffel", test_runner(test_kartoffel::runner))]
 
 #[cfg(all(test, feature = "test-kartoffel"))]
-#[no_mangle]
+#[unsafe(no_mangle)]
 fn main() {
     test_main();
     loop {}

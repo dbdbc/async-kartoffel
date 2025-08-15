@@ -5,6 +5,7 @@
 #![reexport_test_harness_main = "test_main"]
 #![test_runner(runner)]
 
+#[cfg(target_arch = "riscv32")]
 use kartoffel::println;
 
 extern crate alloc;

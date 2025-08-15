@@ -6,7 +6,7 @@
 use alloc::{boxed::Box, string::ToString};
 use async_kartoffel::{print, println, Duration, Position, Timer, Vec2};
 
-use async_algorithm::{ChunkMap, ChunkTerrain, Map, Navigation, StatsDog, Terrain};
+use async_algorithm::{ChunkMapHash, ChunkTerrain, Map, Navigation, StatsDog, Terrain};
 use core::ops::Deref;
 use core::{num::NonZeroU16, ops::RangeInclusive};
 use embassy_executor::{task, Executor};
@@ -30,12 +30,12 @@ fn main() {
 fn print_map(
     map: &impl Map<Terrain>,
     range_east: RangeInclusive<i16>,
-    range_north: RangeInclusive<i16>,
+    range_south: RangeInclusive<i16>,
     markers: impl Fn(Position) -> Option<char>,
 ) {
-    for north in range_north.rev() {
+    for south in range_south {
         for east in range_east.clone() {
-            let pos_print = Position::default() + Vec2::new_global(east, north);
+            let pos_print = Position::default() + Vec2::new_east_south(east, south);
             let ch = match markers(pos_print) {
                 Some(ch) => ch,
                 None => match map.get(pos_print) {
@@ -51,23 +51,23 @@ fn print_map(
     }
 }
 
-type MyMap = ChunkMap<128, Terrain, ChunkTerrain>;
-type MyNav = Navigation<ChunkMap<64, Option<NonZeroU16>, [[Option<NonZeroU16>; 8]; 8]>, 128>;
+type MyMap = ChunkMapHash<128, Terrain, ChunkTerrain>;
+type MyNav = Navigation<ChunkMapHash<64, Option<NonZeroU16>, [[Option<NonZeroU16>; 8]; 8]>, 128>;
 
 struct MapDef<T: Map<Terrain>> {
     map: Box<T>,
     start: Position,
     start_alternative: Option<Position>,
-    target: Position,
+    destination: Position,
     range_east: RangeInclusive<i16>,
-    range_north: RangeInclusive<i16>,
+    range_south: RangeInclusive<i16>,
 }
 
 fn make_map<T: Map<Terrain> + Default>(map_string: &str) -> Result<MapDef<T>, &'static str> {
     let mut map: Box<T> = Default::default();
     let mut start = None;
     let mut start_alternative = None;
-    let mut target = None;
+    let mut destination = None;
     let mut pos = Position::default();
     let east = Vec2::new_east(1);
     let south = Vec2::new_south(1);
@@ -115,10 +115,10 @@ fn make_map<T: Map<Terrain> + Default>(map_string: &str) -> Result<MapDef<T>, &'
             'x' => {
                 east_max = east_max.max((pos - Position::default()).east());
                 map.set(pos, Terrain::Walkable).unwrap();
-                if target.is_some() {
-                    return Err("target (x) must only appear once");
+                if destination.is_some() {
+                    return Err("destination (x) must only appear once");
                 }
-                target = Some(pos);
+                destination = Some(pos);
                 pos += east;
             }
             _ => {
@@ -126,16 +126,16 @@ fn make_map<T: Map<Terrain> + Default>(map_string: &str) -> Result<MapDef<T>, &'
             }
         }
     }
-    match (start, target) {
-        (Some(start), Some(target)) => Ok(MapDef {
+    match (start, destination) {
+        (Some(start), Some(destination)) => Ok(MapDef {
             map,
             start,
             start_alternative,
-            target,
+            destination,
             range_east: 0..=east_max,
-            range_north: -south_max..=0,
+            range_south: 0..=south_max,
         }),
-        _ => Err("start (@) and target (x) must both be defined"),
+        _ => Err("start (@) and destination (x) must both be defined"),
     }
 }
 
@@ -145,20 +145,20 @@ async fn nav() -> ! {
         map,
         start,
         start_alternative,
-        target,
+        destination,
         range_east,
-        range_north,
+        range_south,
     } = make_map::<MyMap>(MAP_BIG).unwrap();
-    println!("{:?}\n{:?}", range_east, range_north);
+    println!("{:?}\n{:?}", range_east, range_south);
 
     print_map(
         map.deref(),
         range_east.clone(),
-        range_north.clone(),
+        range_south.clone(),
         |pos| {
             if pos == start {
                 Some('@')
-            } else if pos == target {
+            } else if pos == destination {
                 Some('x')
             } else if Some(pos) == start_alternative {
                 Some('a')
@@ -170,7 +170,7 @@ async fn nav() -> ! {
 
     let mut nav: Box<MyNav> = Default::default();
     println!("nav alloc");
-    nav.initialize(start, target);
+    nav.initialize(start, destination);
 
     let walkable = |pos| map.get(pos).is_some_and(|t| t.is_known_walkable());
     let mut dog = StatsDog::new();
@@ -186,11 +186,11 @@ async fn nav() -> ! {
         print_map(
             map.deref(),
             range_east.clone(),
-            range_north.clone(),
+            range_south.clone(),
             |pos| {
                 if pos == nav.get_state().task().unwrap().from {
                     Some('@')
-                } else if pos == target {
+                } else if pos == destination {
                     Some('x')
                 } else {
                     nav.get_dist_at(pos)

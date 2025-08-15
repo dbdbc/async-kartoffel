@@ -1,6 +1,8 @@
-use heapless::Vec;
+use heapless::{FnvIndexSet, Vec};
 
 use async_kartoffel::{Direction, Global, Position, RadarScan, RadarSize, Rotation, Vec2};
+
+use crate::{chunk_map::to_chunk_pos, Breakpoint};
 
 use super::{
     chunk_map::{Chunk, ChunkIndex, ChunkLocation, ChunkMap},
@@ -107,10 +109,10 @@ impl Chunk<Terrain> for ChunkTerrain {
 }
 
 impl ChunkTerrain {
-    /// center: relative to south west corner (0, 0 - corner in in_chunk coords)
+    /// center: relative to north west corner (0, 0 - corner in in_chunk coords)
     /// Fails if a tile would be changed from an already known state. This can happen, if we tried
     /// to walked into another bot, and is probably really annoying to repair.
-    fn update_from_radar<Size: RadarSize>(
+    async fn update_from_radar<Size: RadarSize>(
         &mut self,
         radar: &RadarScan<Size>,
         center: Vec2<Global>,
@@ -120,14 +122,14 @@ impl ChunkTerrain {
         let mut new_self = self.clone();
         let mut map_changed = false;
         for east in (center.east() - r).clamp(0, 7)..=(center.east() + r).clamp(0, 7) {
-            for north in (center.north() - r).clamp(0, 7)..=(center.north() + r).clamp(0, 7) {
-                let vec_from_center = Vec2::new_global(east, north) - center;
+            for south in (center.south() - r).clamp(0, 7)..=(center.south() + r).clamp(0, 7) {
+                let vec_from_center = Vec2::new_east_south(east, south) - center;
                 // unwrap okay, because we ensured it is in radar range
                 let walkable = radar
                     .at(vec_from_center.local(direction))
                     .unwrap()
                     .is_walkable_terrain();
-                let in_chunk_index = ChunkIndex::new(east as u8, north as u8);
+                let in_chunk_index = ChunkIndex::new(east as u8, south as u8);
                 match new_self.get(in_chunk_index).is_walkable() {
                     None => new_self.set(in_chunk_index, Terrain::from_walkable(walkable)),
                     Some(current_walkable) => {
@@ -145,34 +147,35 @@ impl ChunkTerrain {
     }
 }
 
-impl<const N: usize> ChunkMap<N, Terrain, ChunkTerrain> {
-    pub fn update<Size: RadarSize>(
-        &mut self,
-        radar: &RadarScan<Size>,
-        pos: Position,
-        direction: Direction,
-    ) -> Result<(), MapError> {
-        let vec = Vec2::new_global(Size::R as i16, Size::R as i16);
-        // unique chunks, since maximum scan size is 9 the scan is guaranteed to fit into 4 chunks
-        let locations: Vec<ChunkLocation, 4> = Rotation::all()
-            .into_iter()
-            .map(|rot| Self::to_chunk_pos(pos + vec.rotate(rot)).0)
-            .collect();
+pub async fn update_chunk_map<M: ChunkMap<Terrain, ChunkTerrain>, Size: RadarSize>(
+    map: &mut M,
+    radar: &RadarScan<Size>,
+    pos: Position,
+    direction: Direction,
+) -> Result<(), MapError> {
+    let vec = Vec2::new_east_south(Size::R as i16, Size::R as i16);
+    // unique chunks, since maximum scan size is 9 the scan is guaranteed to fit into 4 chunks
+    let locations: FnvIndexSet<ChunkLocation, 4> = Rotation::all()
+        .into_iter()
+        .map(|rot| to_chunk_pos(pos + vec.rotate(rot)).0)
+        .collect();
 
-        let mut results = Vec::<ChunkTerrain, 4>::new();
-        for &location in locations.iter() {
-            let chunk = self.get_mut_chunk_or_new(location)?;
-            let in_chunk_coords = pos - location.south_west_pos();
-            let updated = chunk.update_from_radar(radar, in_chunk_coords, direction)?;
-            // can't fail
-            _ = results.push(updated);
-        }
-
-        // only write updates once we are sure they are consistent with the map
-        for (location, update) in locations.into_iter().zip(results) {
-            // unwrap(): we already ensured it exists
-            *self.get_mut_chunk_or_new(location).unwrap() = update;
-        }
-        Ok(())
+    let mut results = Vec::<ChunkTerrain, 4>::new();
+    for &location in locations.iter() {
+        let chunk = map.get_chunk_mut_or_new(location)?;
+        let in_chunk_coords = pos - location.north_west_pos();
+        let updated = chunk
+            .update_from_radar(radar, in_chunk_coords, direction)
+            .await?;
+        // can't fail
+        _ = results.push(updated);
+        Breakpoint::new().await;
     }
+
+    // only write updates once we are sure they are consistent with the map
+    for (&location, update) in locations.into_iter().zip(results) {
+        // unwrap(): we already ensured it exists
+        *map.get_chunk_mut_or_new(location).unwrap() = update;
+    }
+    Ok(())
 }

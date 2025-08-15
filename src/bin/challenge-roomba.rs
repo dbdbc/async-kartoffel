@@ -2,22 +2,24 @@
 #![no_std]
 #![feature(custom_test_frameworks)]
 #![test_runner(test_kartoffel::runner)]
+#![feature(iter_next_chunk)]
 
 use alloc::boxed::Box;
 use async_algorithm::{
-    distance_walk_with_rotation, Breakpoint, ChunkMap, ChunkTerrain, DistanceBotWalk,
-    DistanceManhattan, DistanceMeasure, Exploration, Map, Navigation, StatsDog, Terrain,
+    distance_walk_with_rotation, update_chunk_map, Breakpoint, ChunkMapHash, ChunkTerrain,
+    DistanceBotWalk, DistanceManhattan, DistanceMeasure, Exploration, Map, Navigation, StatsDog,
+    Terrain,
 };
 use async_kartoffel::{
-    print, println, Arm, Bot, Direction, Duration, Instant, Local, Motor, Position, Radar,
-    RadarScan, RadarScanWeak, RadarSize, Rotation, Tile, Timer, Vec2, D9,
+    println, Bot, Direction, Instant, Local, Motor, Position, Radar, RadarScan, RadarScanWeak,
+    RadarSize, Rotation, Tile, Vec2, D5,
 };
 use core::num::NonZeroU16;
 use core::ops::DerefMut;
 use embassy_executor::{task, Executor};
-use embassy_futures::select::{select, select3, Either, Either3};
+use embassy_futures::select::{select, Either};
 use embassy_sync::{blocking_mutex::raw::NoopRawMutex, signal::Signal};
-use heapless::{FnvIndexMap, Vec};
+use heapless::Vec;
 use static_cell::StaticCell;
 
 extern crate alloc;
@@ -34,6 +36,10 @@ fn main() {
     let signal_navigation = SIGNAL_NAVIGATION.init(Signal::new());
     let signal_complete = SIGNAL_COMPLETE.init(Signal::new());
 
+    let map: Box<MyMap> = Default::default();
+    let nav: Box<MyNav> = Default::default();
+    let exploration: Box<MyExp> = Default::default();
+
     println!("async_kartoffel");
 
     executor.run(|spawner| {
@@ -41,60 +47,19 @@ fn main() {
             .spawn(foreground(Bot::take(), signal_map, signal_navigation))
             .unwrap();
         spawner
-            .spawn(map(signal_map, signal_navigation, signal_complete))
+            .spawn(background(
+                map,
+                nav,
+                exploration,
+                signal_map,
+                signal_navigation,
+                signal_complete,
+            ))
             .unwrap();
         spawner.spawn(watchdog(signal_complete)).unwrap();
     })
 }
 
-/// translation is applied before rotation, so still in original coordinates
-#[derive(Default)]
-struct Transform {
-    translation: Vec2<Local>,
-    rotation: Rotation,
-}
-
-impl Transform {
-    fn transform(&self, vec: Vec2<Local>) -> Vec2<Local> {
-        (vec + self.translation).rotate(self.rotation)
-    }
-    fn transform_rot(&self, rot: Rotation) -> Rotation {
-        rot + self.rotation
-    }
-
-    fn from_motor_action(motor: Option<MotorAction>) -> Self {
-        match motor {
-            Some(MotorAction::Step) => Self {
-                translation: Vec2::new_front(1),
-                rotation: Default::default(),
-            },
-            Some(MotorAction::TurnLeft) => Self {
-                translation: Default::default(),
-                rotation: Rotation::Left,
-            },
-            Some(MotorAction::TurnRight) => Self {
-                translation: Default::default(),
-                rotation: Rotation::Right,
-            },
-            None => Default::default(),
-        }
-    }
-}
-
-#[derive(Clone, Copy)]
-enum ArmAction {
-    #[allow(unused)]
-    Stab,
-    Pick,
-}
-impl ArmAction {
-    async fn execute(&self, arm: &mut Arm) {
-        match self {
-            ArmAction::Stab => arm.stab().await,
-            ArmAction::Pick => arm.pick().await,
-        }
-    }
-}
 #[derive(Clone, Copy, PartialEq, Debug)]
 enum MotorAction {
     Step,
@@ -115,148 +80,80 @@ impl MotorAction {
             MotorAction::TurnLeft => motor.turn_left().await,
         }
     }
-}
-struct MotorArmAction {
-    motor: Option<MotorAction>,
-    arm: Option<ArmAction>,
-    arm_timeout: Instant,
+    fn offset(&self) -> Vec2<Local> {
+        match self {
+            MotorAction::Step => Vec2::new_front(1),
+            _ => Vec2::default(),
+        }
+    }
+    fn rotation(&self) -> Rotation {
+        match self {
+            MotorAction::Step => Rotation::Id,
+            MotorAction::TurnRight => Rotation::Right,
+            MotorAction::TurnLeft => Rotation::Left,
+        }
+    }
 }
 
 struct MapUpdate {
-    scan: RadarScanWeak<D9>,
-    pos: Position,
+    scan: RadarScanWeak<D5>,
+    scan_pos: Position,
     direction: Direction,
 }
 
-fn instincts<D: RadarSize>(
-    arm: &Arm,
-    _motor: &Motor,
-    radar_scan: &RadarScan<D>,
-    time_stamp: Instant,
-) -> MotorArmAction {
-    let max_stab_wait = Duration::from_ticks(10_000);
-    if arm.is_ready() {
-        // overwrite next movement with urgent one
-        if radar_scan.at(Vec2::new_front(1)).unwrap() == Tile::Flag {
-            MotorArmAction {
-                motor: None,
-                arm: Some(ArmAction::Pick),
-                arm_timeout: time_stamp + Duration::from_secs(10),
-            }
-        } else {
-            MotorArmAction {
-                motor: None,
-                arm: None,
-                arm_timeout: time_stamp + max_stab_wait,
-            }
-        }
-    } else {
-        MotorArmAction {
-            motor: None,
-            arm: None,
-            arm_timeout: time_stamp + max_stab_wait,
-        }
-    }
-}
-
-async fn execute_with_arm_timeout(
-    radar: &mut Radar,
+async fn execute_until_radar_ready(
+    radar: &Radar,
     motor: &mut Motor,
-    arm: &mut Arm,
-    action: MotorArmAction,
+    motor_action: MotorAction,
     position: &mut Position,
     direction: &mut Direction,
 ) -> bool {
-    if let Some(motor_action) = action.motor {
-        if matches!(
-            select(radar.wait(), motor_action.execute(motor)).await,
-            Either::First(_)
-        ) {
-            return false;
-        } else {
-            match motor_action {
-                MotorAction::TurnLeft => *direction += Rotation::Left,
-                MotorAction::TurnRight => *direction += Rotation::Right,
-                MotorAction::Step => *position += Vec2::new_front(1).global(*direction),
-            }
+    match select(radar.wait(), motor_action.execute(motor)).await {
+        Either::First(_) => false,
+        Either::Second(_) => {
+            *direction += motor_action.rotation();
+            *position += motor_action.offset().global(*direction);
+            true
         }
     }
-    if let Some(arm_action) = action.arm {
-        if matches!(
-            select3(
-                radar.wait(),
-                arm_action.execute(arm),
-                Timer::at(action.arm_timeout),
-            )
-            .await,
-            Either3::First(_)
-        ) {
-            return false;
-        }
-    }
-    true
 }
 
-fn movement(
+fn movement<Size: RadarSize>(
     pos: Position,
     direction: Direction,
-    radar_scan: &RadarScan<impl RadarSize>,
-    navigation_target: &Option<Position>,
-    time_stamp: Instant,
-) -> MotorArmAction {
-    let max_stab_wait = Duration::from_ticks(10_000);
-    let (motor, arm) = MotorAction::ALL_AND_NOTHING
+    radar_scan: &RadarScan<Size>,
+    scan_pos: Position,
+    navigation_destination: Option<Position>,
+) -> Option<MotorAction> {
+    MotorAction::ALL_AND_NOTHING
         .into_iter()
-        .filter_map(|movement| {
-            let t = Transform::from_motor_action(movement);
-            let next_location = t.transform(Default::default());
-            let next_rotation = t.transform_rot(Rotation::Id);
-            let possible = next_location == Default::default()
+        .filter_map(|motor_action| {
+            let translation = motor_action.map_or(Default::default(), |ma| ma.offset());
+            let rotation = motor_action.map_or(Default::default(), |ma| ma.rotation());
+            if translation == Vec2::default()
                 || radar_scan
-                    .at(next_location)
-                    .is_some_and(|tile| tile.is_empty());
-            if possible {
-                // long-term evaluation
-                let eval = navigation_target.as_ref().map_or(0, |&target| {
-                    let pos_next = pos + next_location.global(direction);
-                    let ori_next = direction + next_rotation;
-                    distance_walk_with_rotation(target - pos_next, ori_next)
+                    .at((pos - scan_pos).local(direction) + translation)
+                    .is_some_and(|tile| tile.is_empty())
+            {
+                let eval = navigation_destination.map_or(0, |destination| {
+                    let pos_next = pos + translation.global(direction);
+                    let ori_next = direction + rotation;
+                    distance_walk_with_rotation(destination - pos_next, ori_next)
                 });
-                Some((movement, eval))
+                Some((motor_action, eval))
             } else {
                 None
             }
         })
-        .min_by_key(|&(movement, eval)| {
+        .min_by_key(|&(motor_action, eval)| {
             // this is the values that are minimized, in that order
-            // TODO which order is best?
             (
                 eval,
-                movement.is_some(),                  // prefer no movement
-                movement == Some(MotorAction::Step), // prefer not moving forward
+                motor_action.is_some(),                  // prefer no movement
+                motor_action == Some(MotorAction::Step), // prefer not moving forward
             )
         })
-        .map(|(movement, _eval)| (movement, None))
-        .unwrap_or((None, None));
-    MotorArmAction {
-        motor,
-        arm,
-        arm_timeout: time_stamp + max_stab_wait,
-    }
-}
-
-#[task]
-async fn watchdog(signal_complete: &'static Signal<NoopRawMutex, ()>) -> ! {
-    let mut dog = StatsDog::new();
-    loop {
-        dog.restart_timer();
-        Breakpoint::new().await;
-        dog.feed();
-
-        if signal_complete.try_take().is_some() {
-            println!("{}", dog);
-        }
-    }
+        .map(|(movement, _eval)| movement)?
 }
 
 #[task]
@@ -273,104 +170,85 @@ async fn foreground(
 
     let mut direction = bot.compass.try_direction().unwrap();
 
-    let mut nav_target: Option<Position> = None;
+    let mut nav_destination: Option<Position> = None;
 
     'main_loop: loop {
-        let radar_scan = &radar.scan::<D9>().await;
-        let radar_timestamp = Instant::now();
+        let radar_scan = &radar.scan::<D5>().await;
+        let scan_pos = pos;
         signal_map.signal(MapUpdate {
             scan: radar_scan.weak(),
-            pos,
+            scan_pos,
             direction,
         });
 
-        let action = instincts(arm, motor, radar_scan, radar_timestamp);
-        if !execute_with_arm_timeout(radar, motor, arm, action, &mut pos, &mut direction).await {
-            continue 'main_loop;
+        if radar_scan.at(Vec2::new_front(1)) == Some(Tile::Flag) {
+            arm.pick().await;
         }
 
-        // update navigation target, if background task has provided a new update
-        if let Some(target) = signal_nav.try_take() {
-            nav_target = Some(target);
+        // update navigation destination, if background task has provided a new update
+        if let Some(destination) = signal_nav.try_take() {
+            nav_destination = Some(destination);
         }
 
-        let action = movement(pos, direction, radar_scan, &nav_target, radar_timestamp);
-        if !execute_with_arm_timeout(radar, motor, arm, action, &mut pos, &mut direction).await {
-            continue 'main_loop;
+        while let Some(motor_action) =
+            movement(pos, direction, radar_scan, scan_pos, nav_destination)
+        {
+            if !execute_until_radar_ready(radar, motor, motor_action, &mut pos, &mut direction)
+                .await
+            {
+                continue 'main_loop;
+            }
+            Breakpoint::new().await;
         }
     }
 }
 
-fn get_next<const N: usize, T: Map<Option<NonZeroU16>>>(
-    nav: &Navigation<T, N>,
-    pos: Position,
-) -> Position {
-    let valid_next = nav.next_step(pos);
-    if valid_next.east {
-        pos + Vec2::new_east(1)
-    } else if valid_next.west {
-        pos + Vec2::new_west(1)
-    } else if valid_next.north {
-        pos + Vec2::new_north(1)
-    } else if valid_next.south {
-        pos + Vec2::new_south(1)
-    } else {
-        pos
-    }
-}
-
-fn print_map<T: Map<Terrain>, const N: usize>(
-    map: &T,
-    pos: Position,
-    dist: u16,
-    markers: &FnvIndexMap<Position, char, N>,
-) {
-    let dist = dist as i16;
-    for south in -dist..dist {
-        for east in -dist..dist {
-            let pos_print = pos + Vec2::new_global(east, -south);
-            let ch = match markers.get(&pos_print) {
-                Some(&ch) => ch,
-                None => match map.get(pos_print) {
-                    Some(Terrain::Reachable) => ' ',
-                    Some(Terrain::Walkable) => '~',
-                    Some(Terrain::Blocked) => '█',
-                    _ => '░',
-                },
-            };
-            print!("{}", ch);
-        }
-        println!("");
-    }
-}
-
-type MyMap = ChunkMap<128, Terrain, ChunkTerrain>;
-type MyNav = Navigation<ChunkMap<64, Option<NonZeroU16>, [[Option<NonZeroU16>; 8]; 8]>, 64>;
+type MyMap = ChunkMapHash<128, Terrain, ChunkTerrain>;
+type MyNav = Navigation<ChunkMapHash<64, Option<NonZeroU16>, [[Option<NonZeroU16>; 8]; 8]>, 64>;
 type MyExp = Exploration<256, MyMap>;
 
+#[allow(unused)]
+struct DropTimer<'a> {
+    init: Instant,
+    name: &'a str,
+}
+impl<'a> DropTimer<'a> {
+    #[allow(unused)]
+    fn new(name: &'a str) -> Self {
+        Self {
+            init: Instant::now(),
+            name,
+        }
+    }
+}
+impl Drop for DropTimer<'_> {
+    fn drop(&mut self) {
+        println!("{}: {}", self.name, (Instant::now() - self.init).unwrap());
+    }
+}
+
 #[task]
-async fn map(
+async fn background(
+    mut map: Box<MyMap>,
+    mut nav: Box<MyNav>,
+    mut exploration: Box<MyExp>,
     signal_map: &'static Signal<NoopRawMutex, MapUpdate>,
     signal_nav: &'static Signal<NoopRawMutex, Position>,
     signal_complete: &'static Signal<NoopRawMutex, ()>,
 ) -> ! {
-    let mut map: Box<MyMap> = Default::default();
     map.set(Default::default(), Terrain::Walkable).unwrap();
-    let mut computations: Computations = Default::default();
-    println!("alloc successfull");
-    computations
-        .exploration
-        .initialize(map.deref_mut(), Default::default());
+    exploration.initialize(&mut map, Default::default());
 
+    let mut destination: Option<Position> = None;
+    let mut exploration_completed = false;
     let mut flags = Vec::<Position, 4>::new();
-
     let mut last_update: Option<MapUpdate> = None;
 
     loop {
         // wait for scan (if not already saved)
         let MapUpdate {
             scan,
-            pos,
+            scan_pos,
             direction,
         } = match last_update.take() {
             Some(update) => update,
@@ -378,109 +256,152 @@ async fn map(
         };
 
         // update map
-        if let Some(radar_scan) = scan.upgrade() {
-            if let Err(err) = map.update(&radar_scan, pos, direction) {
-                println!("error in map {:?}", err);
-            }
-            if let Err(err) = computations.exploration.activate(pos, &radar_scan) {
-                println!("error in exploration {:?}", err);
-            }
+        {
+            // let _t = DropTimer::new("t000");
+            if let Some(radar_scan) = scan.upgrade() {
+                {
+                    // let _t = DropTimer::new("tmap");
+                    if let Err(err) =
+                        update_chunk_map(map.deref_mut(), &radar_scan, scan_pos, direction).await
+                    {
+                        println!("error in map {:?}", err);
+                    }
+                }
+                Breakpoint::new().await;
+                {
+                    // let _t = DropTimer::new("texp");
+                    if let Err(err) = exploration.activate(scan_pos, &radar_scan) {
+                        println!("error in exploration {:?}", err);
+                    }
+                }
+                Breakpoint::new().await;
 
-            // keep only flags that are not updated by this scan
-            flags = flags
-                .into_iter()
-                .filter(|&flag_pos| !radar_scan.contains((flag_pos - pos).local(direction)))
-                .collect();
-            for vec in radar_scan.iter_tile(Tile::Flag) {
-                let flag_pos = pos + vec.global(direction);
-                flags.push(flag_pos).expect("more than 4 flags found");
+                // keep only flags that are not updated by this scan
+                flags = flags
+                    .into_iter()
+                    .filter(|&flag_pos| {
+                        !radar_scan.contains((flag_pos - scan_pos).local(direction))
+                    })
+                    .collect();
+                Breakpoint::new().await;
+                for vec in radar_scan.iter_tile(Tile::Flag) {
+                    let flag_pos = scan_pos + vec.global(direction);
+                    flags.push(flag_pos).expect("more than 4 flags found");
+                }
             }
         }
         Breakpoint::new().await;
 
-        let results = computations
-            .run(pos, map.deref_mut(), &flags, signal_complete)
-            .await;
-        if let Some(eval) = results {
-            signal_nav.signal(eval);
-        }
-    }
-}
-
-#[derive(Default)]
-struct Computations {
-    nav: Box<MyNav>,
-    exploration: Box<MyExp>,
-    target: Option<Position>,
-    exploration_completed: bool,
-}
-
-impl Computations {
-    async fn run(
-        &mut self,
-        pos: Position,
-        map: &mut ChunkMap<128, Terrain, ChunkTerrain>,
-        flags: &[Position],
-        signal_complete: &'static Signal<NoopRawMutex, ()>,
-    ) -> Option<Position> {
-        self.exploration.run(map).await;
-        if self.exploration.get_state().is_complete() && !self.exploration_completed {
+        // update border of reachable terrain
+        exploration.run(&mut map).await;
+        if exploration.get_state().is_complete() && !exploration_completed {
             println!("map complete");
-            self.exploration_completed = true;
+            exploration_completed = true;
             signal_complete.signal(());
         }
+        Breakpoint::new().await;
 
-        // reset target if reached
-        if self.target == Some(pos) {
-            self.target = None
+        // reset destination if reached
+        if destination == Some(scan_pos) {
+            destination = None
         }
-        // flags are priority targets
-        if self.target.is_none_or(|target| !flags.contains(&target)) {
-            if let Some(&target_flag) = flags
+        // flags are priority destination
+        if destination.is_none_or(|destination| !flags.contains(&destination)) {
+            if let Some(&destination_flag) = flags
                 .iter()
                 .filter(|&&flag_pos| {
                     map.get(flag_pos)
                         .is_some_and(|terrain| terrain == Terrain::Reachable)
                 })
-                .min_by_key(|&&flag_pos| DistanceManhattan::measure(flag_pos - pos))
+                .min_by_key(|&&flag_pos| DistanceManhattan::measure(flag_pos - scan_pos))
             {
-                self.target = Some(target_flag);
-                self.nav.initialize(pos, target_flag);
-                print_map(
-                    map,
-                    pos,
-                    8,
-                    &FnvIndexMap::<_, _, 2>::from_iter([(pos, '@'), (target_flag, '=')]),
-                );
+                destination = Some(destination_flag);
+                nav.initialize(scan_pos, destination_flag);
             }
         }
-        // target at border of known reachable
-        if self.target.is_none() {
-            if let Some(unknown_reachables) = self.exploration.border(map) {
-                self.target = unknown_reachables
-                    .min_by_key(|&pos_border| DistanceBotWalk::measure(pos_border - pos));
-                if let Some(target) = self.target {
-                    self.nav.initialize(pos, target);
+        // destination at border of known reachable
+        if destination.is_none() {
+            if let Some(mut unknown_reachables) = exploration.border(&map) {
+                fn update_closest(
+                    closest: &mut Option<(Position, u16)>,
+                    candidate: Option<(Position, u16)>,
+                ) {
+                    if let Some(candidate) = candidate {
+                        if closest.is_none_or(|(_, dist_old)| candidate.1 < dist_old) {
+                            *closest = Some(candidate);
+                        }
+                    }
+                }
+                fn get_closest(
+                    iter: impl Iterator<Item = Position>,
+                    reference: Position,
+                ) -> Option<(Position, u16)> {
+                    iter.map(|pos_border| {
+                        (pos_border, DistanceBotWalk::measure(pos_border - reference))
+                    })
+                    .min_by_key(|&(_, dist)| dist)
+                }
+
+                let mut closest = None;
+                loop {
+                    // split iterator into chunks to prevent to many await points
+                    match unknown_reachables.next_chunk::<5>() {
+                        Ok(chunk) => {
+                            update_closest(&mut closest, get_closest(chunk.into_iter(), scan_pos));
+                        }
+                        Err(iter) => {
+                            update_closest(&mut closest, get_closest(iter, scan_pos));
+                            break;
+                        }
+                    }
+                    Breakpoint::new().await;
+                }
+
+                if let Some((destination_pos, _)) = closest {
+                    destination = Some(destination_pos);
+                    nav.initialize(scan_pos, destination_pos);
                 }
             }
         }
-
-        if let Some(task) = self.nav.get_state().task() {
-            if task.from != pos {
-                self.nav.update_start(pos).unwrap();
-            }
-        }
-
         Breakpoint::new().await;
 
-        self.nav
-            .run(|pos| map.get(pos).is_some_and(|t| t.is_known_walkable()))
+        // react to movements that changed the starting position of navigation that changed the
+        // starting position of navigation
+        if let Some(task) = nav.get_state().task() {
+            if task.from != scan_pos {
+                nav.update_start(scan_pos).unwrap();
+            }
+        }
+        Breakpoint::new().await;
+
+        // navigation
+        nav.run(|pos| map.get(pos).is_some_and(|t| t.is_known_walkable()))
             .await;
 
-        if self.nav.get_state().is_success() {
-            Some(get_next(&self.nav, pos))
-        } else {
-            None
+        Breakpoint::new().await;
+        if nav.get_state().is_success() {
+            signal_nav.signal(
+                scan_pos
+                    + nav
+                        .next_step(scan_pos)
+                        .all()
+                        .first()
+                        .map_or(Vec2::default(), |&dir| Vec2::new_in_direction(dir, 1)),
+            );
+        }
+    }
+}
+
+#[task]
+async fn watchdog(signal_complete: &'static Signal<NoopRawMutex, ()>) -> ! {
+    let mut dog = StatsDog::new();
+    loop {
+        dog.restart_timer();
+        Breakpoint::new().await;
+        dog.feed();
+
+        if signal_complete.try_take().is_some() {
+            println!("{}", dog);
         }
     }
 }

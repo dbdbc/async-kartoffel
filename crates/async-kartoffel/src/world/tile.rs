@@ -39,9 +39,11 @@ impl Tile {
             Self::Flag => '=',
         }
     }
+    /// The "." tile. You can go there.
     pub const fn is_empty(self) -> bool {
         matches!(self, Self::Empty)
     }
+    /// Right now it might be blocked by a bot or an item, but in principle you can go there.
     pub const fn is_walkable_terrain(self) -> bool {
         matches!(
             self,

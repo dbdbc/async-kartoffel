@@ -3,7 +3,8 @@
 pub struct OutOfMemory;
 
 /// Maps are expected to be extended (unknown areas become known), but already known tiles must not
-/// change, for [`super::exploration::Exploration`] and [`super::terrain::ChunkTerrain`].
+/// change for [`super::exploration::Exploration`] and [`super::terrain::ChunkTerrain`] to work
+/// correctly.
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct MapInconsistent;
 
@@ -25,4 +26,4 @@ impl From<MapInconsistent> for MapError {
 
 /// tried to change the navigations start position, but there is not currently a navigation running
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub struct NoTarget;
+pub struct NoDestination;

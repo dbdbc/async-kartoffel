@@ -1,0 +1,14 @@
+[package]
+name = "kartoffel-gps-builder"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+kartoffel-gps = {path = "../../crates/kartoffel-gps", default-features = false}
+async-kartoffel = {path = "../../crates/async-kartoffel", default-features = false}
+anyhow = {workspace = true, default-features = true}
+ndarray = {workspace = true, default-features = true}
+ndarray-stats = {workspace = true, default-features = true}
+phf = {workspace = true, default-features = true}
+phf_codegen = {workspace = true, default-features = true}
+phf_shared = {workspace = true, default-features = true}

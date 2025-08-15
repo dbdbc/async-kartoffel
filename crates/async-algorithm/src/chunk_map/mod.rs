@@ -1,9 +1,10 @@
-use core::{marker::PhantomData, ops::Add};
+use core::ops::Add;
 
 use async_kartoffel::{Global, Position, Vec2};
-use heapless::FnvIndexMap;
 
-use super::{error::OutOfMemory, map::Map};
+use crate::error::OutOfMemory;
+
+pub mod hash;
 
 /// Location in chunk, between (0, 0)..=(7, 7)
 #[derive(Clone, PartialEq, Eq, Ord, PartialOrd, Hash, Debug, Copy)]
@@ -25,8 +26,8 @@ impl ChunkIndex {
         self.index
     }
     fn to_vec(self) -> Vec2<Global> {
-        let (east_in_chunk, north_in_chunk) = self.to_indices();
-        Vec2::new_global(east_in_chunk as i16, north_in_chunk as i16)
+        let (east_in_chunk, south_in_chunk) = self.to_indices();
+        Vec2::new_east_south(east_in_chunk as i16, south_in_chunk as i16)
     }
     fn increase_by_one(self) -> Option<Self> {
         assert!(self.index < 64);
@@ -46,7 +47,7 @@ impl Add<ChunkLocation> for ChunkIndex {
     type Output = Position;
 
     fn add(self, rhs: ChunkLocation) -> Self::Output {
-        rhs.south_west_pos() + self.to_vec()
+        rhs.north_west_pos() + self.to_vec()
     }
 }
 
@@ -87,20 +88,20 @@ impl Iterator for IterInChunk {
 }
 impl ExactSizeIterator for IterInChunk {}
 
-/// Chunk south-west corner is at east8 * 8, north8 * 8
+/// Chunk north-west corner is at east8 * 8, south8 * 8
 #[derive(Clone, PartialEq, Eq, Ord, PartialOrd, Hash, Debug, Copy)]
 pub struct ChunkLocation {
     east8: i16,
-    north8: i16,
+    south8: i16,
 }
 impl ChunkLocation {
-    /// this is the 0, 0 (west-south) corner of the chunk
-    pub fn south_west_pos(&self) -> Position {
-        Position::from_from_origin(Vec2::new_global(8 * self.east8, 8 * self.north8))
+    /// this is the 0, 0 (west-north) corner of the chunk
+    pub fn north_west_pos(&self) -> Position {
+        Position::add_to_anchor(Vec2::new_east_south(8 * self.east8, 8 * self.south8))
     }
     /// minimum distance vec to pos
     pub fn min_dist_to(&self, pos: Position) -> Vec2<Global> {
-        let vec_anchor = pos - self.south_west_pos();
+        let vec_anchor = pos - self.north_west_pos();
         fn dist_relaxed(dist_anchor: i16) -> i16 {
             match dist_anchor {
                 ..0 => dist_anchor,
@@ -109,11 +110,25 @@ impl ChunkLocation {
             }
         }
 
-        Vec2::new_global(
+        Vec2::new_east_south(
             dist_relaxed(vec_anchor.east()),
-            dist_relaxed(vec_anchor.north()),
+            dist_relaxed(vec_anchor.south()),
         )
     }
+}
+
+pub fn to_chunk_pos(pos: Position) -> (ChunkLocation, ChunkIndex) {
+    let vec = pos - Position::default();
+    (
+        ChunkLocation {
+            east8: vec.east().div_euclid(8),
+            south8: vec.south().div_euclid(8),
+        },
+        ChunkIndex::new(
+            vec.east().rem_euclid(8) as u8,
+            vec.south().rem_euclid(8) as u8,
+        ),
+    )
 }
 
 pub trait Chunk<T> {
@@ -121,68 +136,6 @@ pub trait Chunk<T> {
     fn get(&self, index: ChunkIndex) -> T;
     fn set(&mut self, index: ChunkIndex, t: T);
 }
-
-/// A map implementation based on 8 by 8 Chunks, stored in a hashmap.
-pub struct ChunkMap<const N: usize, T, C: Chunk<T>> {
-    data: FnvIndexMap<ChunkLocation, C, N>,
-    _phantom: PhantomData<T>,
-}
-impl<const N: usize, T, C: Chunk<T>> ChunkMap<N, T, C> {
-    pub fn new() -> Self {
-        Default::default()
-    }
-    pub fn to_chunk_pos(pos: Position) -> (ChunkLocation, ChunkIndex) {
-        let vec = pos - Position::default();
-        (
-            ChunkLocation {
-                east8: vec.east().div_euclid(8),
-                north8: vec.north().div_euclid(8),
-            },
-            ChunkIndex::new(
-                vec.east().rem_euclid(8) as u8,
-                vec.north().rem_euclid(8) as u8,
-            ),
-        )
-    }
-    /// Return a mutable reference to the chunk at the given index. If it does not exist yet, it
-    /// will be created first.
-    pub fn get_mut_chunk_or_new(&mut self, index: ChunkLocation) -> Result<&mut C, OutOfMemory> {
-        if !self.data.contains_key(&index) {
-            self.data.insert(index, C::new()).map_err(|_| OutOfMemory)?;
-        }
-        // unwrap: we just made sure it exists
-        Ok(self.data.get_mut(&index).unwrap())
-    }
-}
-impl<const N: usize, T, C: Chunk<T>> Default for ChunkMap<N, T, C> {
-    fn default() -> Self {
-        Self {
-            data: FnvIndexMap::new(),
-            _phantom: PhantomData,
-        }
-    }
-}
-impl<const N: usize, T, C: Chunk<T>> Map<T> for ChunkMap<N, T, C> {
-    fn set(&mut self, pos: Position, t: T) -> Result<(), T> {
-        let (div, rem) = Self::to_chunk_pos(pos);
-        match self.get_mut_chunk_or_new(div) {
-            Ok(chunk) => {
-                chunk.set(rem, t);
-                Ok(())
-            }
-            Err(_) => Err(t),
-        }
-    }
-    fn get(&self, pos: Position) -> Option<T> {
-        let (div, rem) = Self::to_chunk_pos(pos);
-        self.data.get(&div).map(|chunk| chunk.get(rem))
-    }
-    fn clear(&mut self) {
-        self.data.clear()
-    }
-}
-
-// Chunk impl
 
 /// Most basic [`Chunk`]
 impl<T: Clone + Default> Chunk<T> for [[T; 8]; 8] {
@@ -217,5 +170,27 @@ impl ChunkBool {
         } else {
             self.data &= !Self::bit(index);
         }
+    }
+}
+
+pub trait ChunkMap<T, C: Chunk<T>> {
+    /// Return a mutable reference to the chunk at the given index. If it does not exist yet, it
+    /// will be created first.
+    fn get_chunk_mut_or_new(&mut self, location: ChunkLocation) -> Result<&mut C, OutOfMemory>;
+    fn get_chunk(&self, location: ChunkLocation) -> Option<&C>;
+    fn clear(&mut self);
+    fn set_value(&mut self, pos: Position, t: T) -> Result<(), T> {
+        let (div, rem) = to_chunk_pos(pos);
+        match self.get_chunk_mut_or_new(div) {
+            Ok(chunk) => {
+                chunk.set(rem, t);
+                Ok(())
+            }
+            Err(_) => Err(t),
+        }
+    }
+    fn get_value(&self, pos: Position) -> Option<T> {
+        let (div, rem) = to_chunk_pos(pos);
+        self.get_chunk(div).map(|chunk| chunk.get(rem))
     }
 }

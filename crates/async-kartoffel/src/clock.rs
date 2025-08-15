@@ -1,5 +1,5 @@
 use core::future::Future;
-use core::ops::{Add, AddAssign, Sub};
+use core::ops::{Add, AddAssign, Div, Sub};
 use core::pin::Pin;
 use core::task::{Context, Poll};
 use core::write;
@@ -25,6 +25,10 @@ impl Instant {
 pub struct Duration(u32);
 
 impl Duration {
+    pub fn since(instant: Instant) -> Option<Self> {
+        Instant::now() - instant
+    }
+
     pub fn from_ticks(n: u32) -> Self {
         Self(n)
     }
@@ -39,6 +43,22 @@ impl Duration {
 
     pub fn as_ticks(&self) -> u32 {
         self.0
+    }
+
+    pub fn as_secs_floor(&self) -> u32 {
+        self.0.div(64_000)
+    }
+
+    pub fn as_secs_ceil(&self) -> u32 {
+        self.0.div_ceil(64_000)
+    }
+
+    pub fn as_millis_ceil(&self) -> u32 {
+        self.0.div_ceil(64)
+    }
+
+    pub fn as_millis_floor(&self) -> u32 {
+        self.0.div(64)
     }
 }
 
@@ -124,6 +144,7 @@ pub enum CooldownType {
     Stab,
     Pick,
     Forward,
+    Back,
     Turn,
     Radar3,
     Radar5,
@@ -138,7 +159,8 @@ impl CooldownType {
             CooldownType::Stab => Duration(60_000),
             CooldownType::Pick => Duration(60_000),
             CooldownType::Forward => Duration(20_000),
-            CooldownType::Turn => Duration(10_000),
+            CooldownType::Back => Duration(30_000),
+            CooldownType::Turn => Duration(25_000),
             CooldownType::Radar3 => Duration(10_000),
             CooldownType::Radar5 => Duration(15_000),
             CooldownType::Radar7 => Duration(22_000),

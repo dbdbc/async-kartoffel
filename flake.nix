@@ -31,6 +31,14 @@
             pkgs.pkg-config
             pkgs.rust-analyzer
             rust-bin-tc
+
+            # required for
+            # cargo install --path ../cargo-call-stack
+            pkgs.llvmPackages_20.libllvm
+            pkgs.libxml2
+
+            # for call stack graph visualization
+            pkgs.graphviz
           ];
         };
       }

@@ -28,6 +28,13 @@ impl Motor {
         .await;
     }
 
+    #[inline(always)]
+    pub fn wait_blocking(&self) {
+        while !self.is_ready() {
+            //
+        }
+    }
+
     pub fn try_step_fw(&mut self) -> Result<(), NotReady> {
         if self.is_ready() {
             motor_step_fw();

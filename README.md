@@ -1,20 +1,70 @@
 # async-kartoffel
 
-An asynchronous abstraction layer for [kartoffels by
-Patryk27](https://github.com/Patryk27/kartoffels/)
+An abstraction layer for [kartoffels by Patryk27](https://codeberg.org/pwy/kartoffels) that is
+intended to simplify the development of complex bots. It is mainly intended to be used with an async
+runtime like [embassy](https://github.com/embassy-rs/embassy), but also (mostly) includes blocking variants.
 
-# How to use
+## Try it out
 
-See binaries in `src` directory. To build and copy to clipboard, use e.g. (linux and wayland)
+In the `src/bin` directory there are a few example bots. These are:
+
+| *name* | *description* |
+|--------|---------------|
+| challenge-roomba.rs | solution to the roomba challenge |
+| runner-gps.rs | navigates to a hardcoded location, evading and killing bots on its way |
+| runner-simple.rs | evades and kills bots |
+| runner-slam.rs | evades and kills bots, while creating a map of the terrain |
+| tutorial-stab.rs | stabbing tutorial with multiple concurrent tasks |
+| tutorial-line.rs | line following tutorial with multiple concurrent tasks |
+
+To build the bots, use
 ```bash
 cargo build --release --bins
-base64 target/riscv32-kartoffel-bot/release/tutorial-stab | wl-copy`
+```
+Then convert the binaries to base64 and copy to clipboard, e.g. like this (linux and wayland)
+```bash
+base64 target/riscv32-kartoffel-bot/release/runner-gps | wl-copy
 ```
 For other systems, check the build script in the [default starter pack](https://github.com/Patryk27/kartoffel/).
 
-# Work in progress 🚧
+## Crates
 
-- the `async-algorithm` crate is possibly incorrect, slow, and may change at any moment
+The different crates provide different functionality:
+
+### `async-kartoffel`
+- Contains safe and convenient abstractions `Motor`, `Arm`, `Radar`, ... For radar scan,
+  an `Rc`-like implementation is used to prevent new scan from overwriting old ones.
+- Easily keep track of absolute `Position`, relative position (`Vec2`) in global (north, east,
+  south, west) and local (front, right, back, left) coordinate frames, `Rotation`s and `Direction`s.
+- Moving the bot, stabbing, scanning etc. mutate global state. This is
+  represented by encapsulating these functions in singletons. They can be aquired
+  exactly once using `Bot::take()`. This way you can be sure that if you keep a
+  reference to `motor`, and checked `motor.is_ready()`, the motor stays ready.
+- `Instant` and `Duration` tyes for `Timer`s
+- `async` API that does not block the execution of other code, like `motor.step_fw().await`. There
+  are also non-async variants such as `motor.wait_blocking()` or `motor.try_step_fw()`.
+
+### `async-algorithm`
+- Contains mapping, exploration, and navigation utilities and algorithms.
+- Algorithms are implemented in async functions, where special care was taken to ensure they don't
+  block for too long, so that fast reaction times are still possible.
+- `StatsDog`: Utility for gathering latency and execution time stats
+- Measure distances: Manhattan (taxi-cab), minimum, maximum, bot clock cycles, ...
+
+### `kartoffel-gps` and `kartoffel-gps-builder`
+- Provided with a map of the terrain, the exact global location can be uniquely identified by
+  analysing terrain features.
+- The provided map is stored in memory and can be used.
+- Additionally, the provided map is analysed at compile time to allow fast and efficient navigation
+  to any location.
+
+### `test-kartoffel`
+- Can be used to write unit tests.
+
+## Work in progress 🚧
+
+There may be some bugs, especially in the `async-algorithm` crate. The `async-kartoffel` crate is
+relatively stable.
 
 Possible improvements:
 - tests for binaries
@@ -23,37 +73,27 @@ Possible improvements:
 - timer queue, better wakers
 - benchmarks and optimization
 
-# Features
+## Tips
+### Analysing stack size
+The bot only has 4096 bytes of stack memory. Large arrays can easily cause a stack overflow. To
+prevent this, use the provided allocator to heap allocate these arrays. You can use
+[cargo-call-stack](https://github.com/Dirbaio/cargo-call-stack)  (with updated ```llvm-sys``` to
+match llvm version, at time of writing `llvm-sys = "201.0.1"`) to analyse the stack requirements of
+each function.
 
-- Concurrent execution is useful for managing multiple tasks (like navigation and immediate
-  reactions to new information) at once. To use the async functions, an executor must be used, e.g.
-  the `embassy_executor`. The API can also be used in a blocking paradigm.
-- Moving the bot, stabbing, scanning etc. mutate global state. This is
-  represented by encapsulating these functions in singletons. They can be aquired
-  exactly once using `Bot::take()`. This way you can be sure that if you keep a
-  reference to `motor`, and checked `motor.is_ready()`, the motor stays ready.
-- If you tried to use `Motor`/`Arm`/... and they were not ready, an `Err` is returned.
-- In the [default
-  firmware](https://github.com/Patryk27/kartoffels/tree/main/app/crates/kartoffel),
-  radar scan can be overwritten by new scans. In this API, this is no longer
-  possible, which is enforced by preventing any new scans as long as not all
-  radar scans have been dropped. It might be necessary to manually call
-  `mem::drop` in certain scenarios.
-- Bound checking radar scan
-- `Instant` and `Duration` tyes for timers
-- `Tile`, `Direction`, `Distance` types
-- Unit Tests
-- Interruptable and cooperative `Map` and `Navigation` in `async-algorithm`
-  crate, to ensure low latency reactions to other bots.
+```bash
+cargo call-stack -i target/riscv32-kartoffel-bot/release/runner-gps --target riscv32-unknown-none -v > cg.dot
+dot -Tsvg cg.dot > cg.svg
+```
 
-# Tests
+### Tests
 
 The unstable `custom_test_frameworks` is used for test. The build command is e.g. (linux and wayland)
 ```bash
 cargo build --release --tests --all
 base64 target/riscv32-kartoffel-bot/release/deps/async_kartoffel-e58abfc84af62516 | wl-copy
 ```
-Hash (`e58a...`) may need to be adapted.
+The hash (`e58a...`) may need to be adapted.
 
 Add the following lines 
 ```rust
@@ -62,3 +102,7 @@ Add the following lines
 #![test_runner(test_kartoffel::runner)]
 ```
 add the top of your library to enable tests. Might not work for binaries though.
+
+### Running native binaries
+```cargo run --release --package kartoffel-gps-builder --target x86_64-unknown-linux-gnu -Z build-std=core,std,alloc --bin analyze-map```
+

@@ -17,6 +17,12 @@ In the `src/bin` directory there are a few example bots. These are:
 | tutorial-stab.rs | stabbing tutorial with multiple concurrent tasks |
 | tutorial-line.rs | line following tutorial with multiple concurrent tasks |
 
+The runner-gps bot can be spectated at [the official webpage](https://kartoffels.pwy.io) by joining one of the following ids:
+- d446-2f32-3373-5147
+- ea1b-f81f-9089-6f07
+- 905f-47de-08a1-75fc
+- fc25-50df-6b90-2789
+
 To build the bots, use
 ```bash
 cargo build --release --bins

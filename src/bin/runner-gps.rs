@@ -294,14 +294,13 @@ async fn execute_with_arm_timeout(
     arm: &mut Arm,
     action: &MotorArmAction,
 ) -> (Transform, ExecutionResult) {
-    if let Some(motor_action) = action.motor {
-        if matches!(
+    if let Some(motor_action) = action.motor
+        && matches!(
             select(radar.wait(), motor_action.execute(motor)).await,
             Either::First(_)
         ) {
             return (Transform::identity(), ExecutionResult::RadarReady);
         }
-    }
     (
         Transform::from_motor_action(action.motor),
         if action.arm.is_some() {
@@ -668,12 +667,11 @@ impl BotNavState {
 
     /// update global position if new scan is available to analyse
     fn analyse_scan(&mut self, radar_scan: &RadarScan<D7>) {
-        if let Some(pos) = get_global_pos(&MapSection::from_scan(radar_scan, self.facing)) {
-            if self.global_pos.is_none_or(|old_pos| old_pos != pos) {
+        if let Some(pos) = get_global_pos(&MapSection::from_scan(radar_scan, self.facing))
+            && self.global_pos.is_none_or(|old_pos| old_pos != pos) {
                 self.global_pos = Some(pos);
                 println!("pos update {}", pos);
             }
-        }
     }
 
     /// get latest navigation update

@@ -4,9 +4,9 @@ use async_kartoffel::{Direction, Position};
 use heapless::{FnvIndexMap, Vec};
 
 use super::{
+    DistanceManhattan, DistanceMeasure, Map,
     breakpoint::Breakpoint,
     error::{NoDestination, OutOfMemory},
-    DistanceManhattan, DistanceMeasure, Map,
 };
 
 // possibly implemented as bitfield
@@ -409,10 +409,10 @@ impl<T: Map<Option<NonZeroU16>>, const N: usize> Navigation<T, N> {
         let mut ret = DirectionCombination::default();
         if let Some(Some(dist_at)) = self.distances.get(pos) {
             for (neighbor, dir) in pos.neighbors() {
-                if let Some(Some(dist_neighbor)) = self.distances.get(neighbor) {
-                    if dist_neighbor < dist_at {
-                        ret.set(dir, true);
-                    }
+                if let Some(Some(dist_neighbor)) = self.distances.get(neighbor)
+                    && dist_neighbor < dist_at
+                {
+                    ret.set(dir, true);
                 }
             }
         }

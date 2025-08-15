@@ -306,8 +306,8 @@ async fn background(
             destination = None
         }
         // flags are priority destination
-        if destination.is_none_or(|destination| !flags.contains(&destination)) {
-            if let Some(&destination_flag) = flags
+        if destination.is_none_or(|destination| !flags.contains(&destination))
+            && let Some(&destination_flag) = flags
                 .iter()
                 .filter(|&&flag_pos| {
                     map.get(flag_pos)
@@ -318,19 +318,17 @@ async fn background(
                 destination = Some(destination_flag);
                 nav.initialize(scan_pos, destination_flag);
             }
-        }
         // destination at border of known reachable
-        if destination.is_none() {
-            if let Some(mut unknown_reachables) = exploration.border(&map) {
+        if destination.is_none()
+            && let Some(mut unknown_reachables) = exploration.border(&map) {
                 fn update_closest(
                     closest: &mut Option<(Position, u16)>,
                     candidate: Option<(Position, u16)>,
                 ) {
-                    if let Some(candidate) = candidate {
-                        if closest.is_none_or(|(_, dist_old)| candidate.1 < dist_old) {
+                    if let Some(candidate) = candidate
+                        && closest.is_none_or(|(_, dist_old)| candidate.1 < dist_old) {
                             *closest = Some(candidate);
                         }
-                    }
                 }
                 fn get_closest(
                     iter: impl Iterator<Item = Position>,
@@ -362,16 +360,14 @@ async fn background(
                     nav.initialize(scan_pos, destination_pos);
                 }
             }
-        }
         Breakpoint::new().await;
 
         // react to movements that changed the starting position of navigation that changed the
         // starting position of navigation
-        if let Some(task) = nav.get_state().task() {
-            if task.from != scan_pos {
+        if let Some(task) = nav.get_state().task()
+            && task.from != scan_pos {
                 nav.update_start(scan_pos).unwrap();
             }
-        }
         Breakpoint::new().await;
 
         // navigation

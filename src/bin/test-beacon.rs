@@ -85,8 +85,8 @@ async fn main_task(mut bot: Bot) -> ! {
             {
                 // position update if out of sync
                 let scan = bot.radar.scan::<DRadar>().await;
-                if let Some(new_pos) = get_global_pos(&MapSection::from_scan(&scan, facing)) {
-                    if new_pos != pos {
+                if let Some(new_pos) = get_global_pos(&MapSection::from_scan(&scan, facing))
+                    && new_pos != pos {
                         println!("correction pos: {} -> {}", pos, new_pos);
                         pos = new_pos;
                         navigator = match navigator.set_start(pos).compute().await {
@@ -98,7 +98,6 @@ async fn main_task(mut bot: Bot) -> ! {
                             }
                         };
                     }
-                }
             }
 
             let time_switch = Instant::now();

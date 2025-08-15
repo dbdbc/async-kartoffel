@@ -2,13 +2,14 @@
 
 An abstraction layer for [kartoffels by Patryk27](https://codeberg.org/pwy/kartoffels) that is
 intended to simplify the development of complex bots. It is mainly intended to be used with an async
-runtime like `embassy` https://github.com/embassy-rs/embassy, but also includes blocking variants (TODO).
+runtime like `embassy` https://github.com/embassy-rs/embassy, but also (mostly) includes blocking variants.
 
 # Try it out
 
 In the `src/bin` directory there are a few example bots. These are:
 
 | *name* | *description* |
+|--------|---------------|
 | challenge-roomba.rs | solution to the roomba challenge |
 | runner-gps.rs | navigates to a hardcoded location, evading and killing bots on its way |
 | runner-simple.rs | evades and kills bots |

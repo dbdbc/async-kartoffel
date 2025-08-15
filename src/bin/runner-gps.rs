@@ -17,6 +17,7 @@ use heapless::Vec;
 use kartoffel_gps::{
     beacon::{Navigator, NavigatorEnum, NavigatorError},
     gps::{MapSection, MapSectionTrait},
+    pos::pos_east_south,
     GlobalPos,
 };
 use static_cell::StaticCell;
@@ -710,7 +711,7 @@ async fn foreground(
     let arm = &mut bot.arm;
     let motor = &mut bot.motor;
 
-    let destination = GlobalPos::add_to_anchor(Vec2::new_east(14) + Vec2::new_south(36));
+    let destination = pos_east_south(14, 36);
     sync.signal_destination.signal(destination);
     // println!("-> dest {}", destination);
     println!("destination: {}", destination);

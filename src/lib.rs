@@ -2,14 +2,12 @@
 
 extern crate alloc;
 
-use async_kartoffel::Vec2;
 use kartoffel_gps::{
-    beacon::{
-        BeaconInfo, {NavigatorResources, NavigatorResourcesImpl},
-    },
+    beacon::{BeaconInfo, NavigatorResources, NavigatorResourcesImpl},
     const_graph::Graph,
     gps::{MapSection, MapSectionTrait},
     map::TrueMap,
+    pos::pos_east_south,
     GlobalPos,
 };
 
@@ -19,10 +17,7 @@ include!(concat!(env!("OUT_DIR"), "/codegen.rs"));
 
 pub fn get_global_pos(chunk: &MapSection<CHUNK_SIZE>) -> Option<GlobalPos> {
     let (east, south) = UNIQUE_CHUNKS.get(chunk.compress()?.as_ref()).cloned()?;
-    Some(GlobalPos::add_to_anchor(Vec2::new_east_south(
-        east.into(),
-        south.into(),
-    )))
+    Some(pos_east_south(east.into(), south.into()))
 }
 
 pub fn global_pos_entries(

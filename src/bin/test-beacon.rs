@@ -13,6 +13,7 @@ use example_kartoffels::{beacon_info, get_global_pos, get_navigator_info, naviga
 use kartoffel_gps::{
     beacon::Navigator,
     gps::{MapSection, MapSectionTrait},
+    pos::pos_east_south,
     GlobalPos,
 };
 use rand::{rngs::SmallRng, seq::IndexedRandom, SeedableRng};
@@ -50,10 +51,10 @@ async fn main_task(mut bot: Bot) -> ! {
     let navigator = Navigator::new(resources);
 
     let destinations = &[
-        GlobalPos::add_to_anchor(Vec2::new_east_south(4, 5)),
-        GlobalPos::add_to_anchor(Vec2::new_east_south(62, 53)),
-        GlobalPos::add_to_anchor(Vec2::new_east_south(125, 9)),
-        GlobalPos::add_to_anchor(Vec2::new_east_south(8, 62)),
+        pos_east_south(4, 5),
+        pos_east_south(62, 53),
+        pos_east_south(125, 9),
+        pos_east_south(8, 62),
     ];
 
     println!("setting target");

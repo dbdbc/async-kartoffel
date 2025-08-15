@@ -4,9 +4,10 @@ use std::io::{BufWriter, Write};
 use std::ops::Div;
 use std::path::Path;
 
+use async_kartoffel::RadarSize;
+use kartoffel_gps::GlobalPos;
 use kartoffel_gps::gps::{MapSection, MapSectionTrait};
 use kartoffel_gps::pos::pos_east_south;
-use kartoffel_gps::GlobalPos;
 use kartoffel_gps_builder::{
     beacon_nav::{build_trivial_navigation_graph, find_beacons, get_beacon_info},
     const_global_pos::ArrayBuilder,
@@ -145,6 +146,8 @@ fn add_gps<T: MapSectionTrait>(file: &mut BufWriter<impl Write>, map: &Map) {
             &std::format!("({}, {})", center_east, center_south),
         );
     }
+
+    writeln!(file, "const CHUNK_SIZE: usize = {};\n", T::Size::D,).unwrap();
 
     writeln!(
         file,

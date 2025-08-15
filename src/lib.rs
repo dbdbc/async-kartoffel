@@ -1,15 +1,4 @@
 #![no_std]
-#![no_main]
-#![feature(custom_test_frameworks)]
-#![reexport_test_harness_main = "test_main"]
-#![test_runner(test_kartoffel::runner)]
-
-#[cfg(test)]
-#[unsafe(no_mangle)]
-fn main() {
-    // test_main(); // TODO
-    loop {}
-}
 
 extern crate alloc;
 
@@ -21,8 +10,6 @@ use kartoffel_gps::{
     map::TrueMap,
     pos::pos_east_south,
 };
-
-const CHUNK_SIZE: usize = 7;
 
 include!(concat!(env!("OUT_DIR"), "/codegen.rs"));
 

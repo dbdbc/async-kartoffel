@@ -15,7 +15,7 @@ mod world;
 use kartoffel::timer_seed;
 
 pub use self::bot::{
-    Arm, Bot, Compass, Motor, Radar, RadarScan, RadarScanWeak, RadarSize, D3, D5, D7, D9,
+    Arm, Bot, Compass, D3, D5, D7, D9, Motor, Radar, RadarScan, RadarScanWeak, RadarSize,
 };
 pub use self::clock::{Cooldown, CooldownType, Duration, Instant, Timer};
 pub use self::world::{

@@ -1385,28 +1385,22 @@ async fn compute<
 
 #[cfg(test)]
 mod tests {
+    extern crate std;
 
+    use super::*;
+    use crate::pos::pos_east_south;
+    use async_kartoffel_generic::Global;
     use core::{
         fmt::{Display, Write},
         sync::atomic::{AtomicBool, Ordering},
     };
-
-    use async_kartoffel::{Global, print, println};
     use rand::{
         SeedableRng,
         distr::{Distribution, Uniform},
         rngs::SmallRng,
         seq::IteratorRandom,
     };
-
-    use crate::pos::pos_east_south;
-
-    extern crate alloc;
-
-    use super::*;
-    use test_kartoffel::{
-        TestError, assert, assert_eq, assert_err, assert_none, option_unwrap, result_unwrap,
-    };
+    use std::println;
 
     struct TestMap<const WIDTH: usize, const HEIGHT: usize> {
         tiles: [[bool; WIDTH]; HEIGHT],
@@ -1501,8 +1495,8 @@ mod tests {
         }
     }
 
-    #[test_case]
-    fn trivial_nav1() -> Result<(), TestError> {
+    #[test]
+    fn trivial_nav1() {
         println!("map1");
         let map = TestMap::new([
             [true, true, true, true, true, true],
@@ -1529,12 +1523,10 @@ mod tests {
             Ok(true)
         );
         assert_eq!(map.dirty_outside.load(Ordering::Relaxed), false);
-
-        Ok(())
     }
 
-    #[test_case]
-    fn trivial_nav2() -> Result<(), TestError> {
+    #[test]
+    fn trivial_nav2() {
         println!("map2");
         let map = TestMap::new([
             [true, true, true, true, true, true],
@@ -1560,12 +1552,10 @@ mod tests {
             Ok(false)
         );
         assert_eq!(map.dirty_outside.load(Ordering::Relaxed), false);
-
-        Ok(())
     }
 
-    #[test_case]
-    fn trivial_nav3() -> Result<(), TestError> {
+    #[test]
+    fn trivial_nav3() {
         println!("map3");
         let map = TestMap::new([
             [true, true, true],
@@ -1573,8 +1563,8 @@ mod tests {
             [true, true, true],
             [true, false, true],
         ]);
-        assert_eq!(map.get(pos_east_south(2, -3)), true);
-        assert_eq!(map.get(pos_east_south(1, -3)), false);
+        assert_eq!(map.get(pos_east_south(2, 3)), true);
+        assert_eq!(map.get(pos_east_south(1, 3)), false);
         assert_eq!(
             is_navigation_trivial::<64>(&map, map.corner_north_west(), map.corner_south_east()),
             Ok(false)
@@ -1594,12 +1584,10 @@ mod tests {
         assert_eq!(map.dirty_outside.load(Ordering::Relaxed), false);
 
         assert_eq!(
-            is_navigation_trivial::<64>(&map, map.corner_north_east(), pos_east_south(3, -3)),
+            is_navigation_trivial::<64>(&map, map.corner_north_east(), pos_east_south(3, 3)),
             Ok(false)
         );
         assert_eq!(map.dirty_outside.load(Ordering::Relaxed), true);
-
-        Ok(())
     }
 
     /// Trivial navigable means: No matter where you go, if the general direction is correct, you will
@@ -1689,8 +1677,8 @@ mod tests {
         return false;
     }
 
-    #[test_case]
-    fn trivial_nav_positive() -> Result<(), TestError> {
+    #[test]
+    fn trivial_nav_positive() {
         let mut rng = {
             let seed = [0u8; 32];
             let rng = SmallRng::from_seed(seed);
@@ -1701,7 +1689,7 @@ mod tests {
         fn for_size<const WIDTH: usize, const HEIGHT: usize, const BUFFER_SIZE: usize>(
             rng: &mut SmallRng,
             odds: (u16, u16),
-        ) -> Result<(), TestError> {
+        ) {
             let mut map = [[false; WIDTH]; HEIGHT];
             let dist = Uniform::try_from(0..odds.0 + odds.1).unwrap();
 
@@ -1749,7 +1737,7 @@ mod tests {
                 if triv_nav {
                     println!("t {:?} {:?}", dir0, dir1);
                     let mut pos = start;
-                    for i in 0..WIDTH + HEIGHT - 2 {
+                    for _i in 0..WIDTH + HEIGHT - 2 {
                         let dirs = [dir0, dir1].into_iter().filter(|&dir| {
                             let new_pos = pos + Vec2::new_in_direction(dir, 1);
                             (dest - new_pos).in_direction(dir) >= 0 && map.get(new_pos)
@@ -1758,7 +1746,7 @@ mod tests {
                         if let Some(dir) = dir {
                             pos = pos + Vec2::new_in_direction(dir, 1);
                         } else {
-                            return Err(TestError);
+                            assert!(false);
                         }
                     }
                     assert_eq!(pos, dest);
@@ -1774,23 +1762,19 @@ mod tests {
 
             // assert_eq!(map.dirty_outside.get(), false);
             println!();
-
-            Ok(())
         }
 
         for i in 0..100 {
             println!("\n{}", i);
-            for_size::<1, 5, 3>(&mut rng, (4, 1))?;
-            for_size::<2, 5, 3>(&mut rng, (4, 1))?;
-            for_size::<3, 5, 4>(&mut rng, (4, 1))?;
-            for_size::<4, 5, 4>(&mut rng, (4, 1))?;
-            for_size::<5, 5, 5>(&mut rng, (4, 1))?;
-            for_size::<5, 4, 4>(&mut rng, (4, 1))?;
-            for_size::<5, 3, 4>(&mut rng, (4, 1))?;
-            for_size::<5, 2, 3>(&mut rng, (4, 1))?;
-            for_size::<5, 1, 3>(&mut rng, (4, 1))?;
+            for_size::<1, 5, 3>(&mut rng, (4, 1));
+            for_size::<2, 5, 3>(&mut rng, (4, 1));
+            for_size::<3, 5, 4>(&mut rng, (4, 1));
+            for_size::<4, 5, 4>(&mut rng, (4, 1));
+            for_size::<5, 5, 5>(&mut rng, (4, 1));
+            for_size::<5, 4, 4>(&mut rng, (4, 1));
+            for_size::<5, 3, 4>(&mut rng, (4, 1));
+            for_size::<5, 2, 3>(&mut rng, (4, 1));
+            for_size::<5, 1, 3>(&mut rng, (4, 1));
         }
-
-        Ok(())
     }
 }

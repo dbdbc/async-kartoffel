@@ -1,7 +1,7 @@
 use std::path::Path;
 
-use async_kartoffel::Vec2;
-use kartoffel_gps::{map::TrueMap, GlobalPos};
+use async_kartoffel_generic::Vec2;
+use kartoffel_gps::{GlobalPos, map::TrueMap};
 use kartoffel_gps_builder::map::Map;
 
 fn main() {

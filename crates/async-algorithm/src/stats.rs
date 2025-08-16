@@ -9,19 +9,20 @@ use super::Breakpoint;
 /// A watchdog-like utility that can e.g. be used to track how often a certain Future is polled.
 ///
 /// ```no_run
-/// async fn with_watchdog() {
-///     let mut dog = StatsDog::new();
+/// use async_kartoffel_generic::{ClockBackend, Duration};
+/// use async_algorithm::StatsDog;
+/// async fn with_watchdog<C: ClockBackend>() {
+///     let mut dog = StatsDog::<C>::new();
+///     let mut i = 0;
 ///     loop {
 ///         let elapsed = dog.feed();
-///         if elapsed > Duration::from_ticks(20_000) {
+///         if elapsed > Duration::<C>::from_ticks(20_000) {
 ///             println!("warning: blocked {}", elapsed);
 ///         }
-///
-///         let completed: bool;
-///         // do something
-///
-///         if completed {
+///         i += 1;
+///         if i > 10 {
 ///             println!("{}", dog);
+///             break;
 ///         }
 ///     }
 /// }

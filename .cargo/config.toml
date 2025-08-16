@@ -1,18 +1,1 @@
-[build]
-target = "misc/riscv32-kartoffel-bot.json"
-
-[unstable]
-build-std = ["alloc", "core", "compiler_builtins"]
-build-std-features = ["compiler-builtins-mem"]
-
-[target.riscv32-kartoffel-bot]
-rustflags = [
-    "-C", "link-arg=-Tmisc/riscv32-kartoffel-bot.ld",
-
-    # for cargo-call-stack
-    "-Zemit-stack-sizes",
-    "-Clinker-plugin-lto",
-    "-Clink-arg=-mllvm=-lto-embed-bitcode=optimized",
-    "-Clink-arg=-mllvm=-stack-size-section",
-]
 

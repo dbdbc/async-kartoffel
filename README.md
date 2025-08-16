@@ -112,3 +112,5 @@ add the top of your library to enable tests. Might not work for binaries though.
 ### Running native binaries
 ```cargo run --release --package kartoffel-gps-builder --target x86_64-unknown-linux-gnu -Z build-std=core,std,alloc --bin analyze-map```
 
+### Workspace layout
+as recommended here https://ferrous-systems.com/blog/test-embedded-app/

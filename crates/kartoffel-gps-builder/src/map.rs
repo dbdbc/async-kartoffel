@@ -1,10 +1,7 @@
 use anyhow::anyhow;
-use async_kartoffel::Tile;
-use async_kartoffel::Vec2;
-use core::default::Default;
-use core::fmt::Display;
-use kartoffel_gps::gps::MapSectionTrait;
-use kartoffel_gps::GlobalPos;
+use async_kartoffel_generic::{Tile, Vec2};
+use core::{default::Default, fmt::Display};
+use kartoffel_gps::{GlobalPos, gps::MapSectionTrait};
 use std::{
     collections::HashMap,
     fs::File,

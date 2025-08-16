@@ -1,8 +1,8 @@
 use core::{fmt::Display, future::Future};
 
-use embassy_futures::select::{select, Either};
+use embassy_futures::select::{Either, select};
 
-use async_kartoffel::{Duration, Instant};
+use async_kartoffel_generic::{ClockBackend, Duration, Instant};
 
 use super::Breakpoint;
 
@@ -26,20 +26,20 @@ use super::Breakpoint;
 ///     }
 /// }
 /// ```
-pub struct StatsDog {
-    sum_duration: Duration,
+pub struct StatsDog<C: ClockBackend> {
+    sum_duration: Duration<C>,
     counter: u32,
-    max_duration: Duration,
-    min_duration: Duration,
+    max_duration: Duration<C>,
+    min_duration: Duration<C>,
     sum_sq_duration: u64,
-    last_time: Instant,
+    last_time: Instant<C>,
 }
-impl Default for StatsDog {
+impl<C: ClockBackend> Default for StatsDog<C> {
     fn default() -> Self {
         Self::new()
     }
 }
-impl StatsDog {
+impl<C: ClockBackend> StatsDog<C> {
     pub fn new() -> Self {
         Self {
             last_time: Instant::now(),
@@ -69,7 +69,7 @@ impl StatsDog {
         }
     }
     /// resets the timer, and adds the elapsed time to the gathered statistics
-    pub fn feed(&mut self) -> Duration {
+    pub fn feed(&mut self) -> Duration<C> {
         let now = Instant::now();
         let duration = (now - self.last_time).unwrap();
 
@@ -92,7 +92,7 @@ impl StatsDog {
     pub fn count(&self) -> u32 {
         self.counter
     }
-    pub fn total(&self) -> Duration {
+    pub fn total(&self) -> Duration<C> {
         self.sum_duration
     }
     /// empirical standard deviation
@@ -106,7 +106,7 @@ impl StatsDog {
             .isqrt() as u32
     }
 }
-impl Display for StatsDog {
+impl<C: ClockBackend> Display for StatsDog<C> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         writeln!(f, "latency stats")?;
         writeln!(f, "n    : {}", self.counter)?;

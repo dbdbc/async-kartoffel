@@ -3,10 +3,11 @@
 #![feature(custom_test_frameworks)]
 #![test_runner(test_kartoffel::runner)]
 
-use core::sync::atomic::{compiler_fence, Ordering};
+use core::sync::atomic::{Ordering, compiler_fence};
 
-use async_kartoffel::{println, Bot, Instant, RadarSize, Tile, Vec2, D3, D5, D7, D9};
-use embassy_executor::{task, Executor};
+use async_kartoffel::{Bot, Instant, println};
+use async_kartoffel_generic::{D3, D5, D7, D9, RadarScanTrait, RadarSize, Tile, Vec2};
+use embassy_executor::{Executor, task};
 use static_cell::StaticCell;
 
 #[unsafe(no_mangle)]

@@ -1,6 +1,6 @@
 use core::ops::Add;
 
-use async_kartoffel::{Global, Position, Vec2};
+use async_kartoffel_generic::{Global, Position, Vec2};
 
 use crate::error::OutOfMemory;
 

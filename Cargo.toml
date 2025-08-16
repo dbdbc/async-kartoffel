@@ -7,6 +7,7 @@ members = [
 	"crates/test-kartoffel",
 	"crates/kartoffel-gps",
 	"crates/kartoffel-gps-builder",
+	"crates/async-kartoffel-generic",
 ]
 
 [workspace.package]
@@ -51,6 +52,7 @@ edition.workspace = true
 heapless.workspace = true
 embassy-futures.workspace = true
 async-kartoffel = {path = "crates/async-kartoffel", features = ["critical-section-impl", "serial-panic", "test-kartoffel"] }
+async-kartoffel-generic = {path = "crates/async-kartoffel-generic"}
 async-algorithm = {path = "crates/async-algorithm"}
 test-kartoffel = {path = "crates/test-kartoffel"}
 kartoffel-gps = {path = "crates/kartoffel-gps"}
@@ -65,7 +67,7 @@ phf = { version = "0.11.3", default-features = false }
 phf_codegen = "0.11.3"
 kartoffel-gps = {path = "crates/kartoffel-gps", default-features = false}
 kartoffel-gps-builder = {path = "crates/kartoffel-gps-builder"}
-async-kartoffel = {path = "crates/async-kartoffel", default-features = false}
+async-kartoffel-generic = {path = "crates/async-kartoffel-generic", default-features = false}
 
 [lib]
 test = false

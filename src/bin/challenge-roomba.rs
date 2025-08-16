@@ -10,8 +10,10 @@ use async_algorithm::{
     Exploration, Map, Navigation, StatsDog, Terrain, distance_walk_with_rotation, update_chunk_map,
 };
 use async_kartoffel::{
-    Bot, D5, Direction, Instant, Local, Motor, Position, Radar, RadarScan, RadarScanWeak,
-    RadarSize, Rotation, Tile, Vec2, println,
+    Bot, Instant, KartoffelClock, Motor, Radar, RadarScan, RadarScanWeak, println,
+};
+use async_kartoffel_generic::{
+    D5, Direction, Local, Position, RadarScanTrait, RadarSize, Rotation, Tile, Vec2,
 };
 use core::num::NonZeroU16;
 use core::ops::DerefMut;
@@ -392,7 +394,7 @@ async fn background(
 
 #[task]
 async fn watchdog(signal_complete: &'static Signal<NoopRawMutex, ()>) -> ! {
-    let mut dog = StatsDog::new();
+    let mut dog = StatsDog::<KartoffelClock>::new();
     loop {
         dog.restart_timer();
         Breakpoint::new().await;

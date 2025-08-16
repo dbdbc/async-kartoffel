@@ -5,6 +5,7 @@ edition.workspace = true
 
 [dependencies]
 test-kartoffel = {path = "../../crates/test-kartoffel", optional = true}
+async-kartoffel-generic = {path = "../../crates/async-kartoffel-generic"}
 kartoffel.workspace = true
 critical-section.workspace = true
 heapless.workspace = true

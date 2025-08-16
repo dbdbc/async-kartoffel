@@ -2,8 +2,8 @@ use crate::{
     graph::{Graph, GraphMappingSingleNode},
     map::{Map, PositionBiMap},
 };
-use async_kartoffel::{Direction, Vec2};
-use kartoffel_gps::{beacon::BeaconInfo, GlobalPos};
+use async_kartoffel_generic::{Direction, Vec2};
+use kartoffel_gps::{GlobalPos, beacon::BeaconInfo};
 use ndarray_stats::QuantileExt;
 
 pub type PosGraph<'s, 'd> = Graph<GlobalPos, GlobalPos, &'s PositionBiMap, &'d PositionBiMap>;

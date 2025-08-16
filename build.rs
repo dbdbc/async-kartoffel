@@ -4,7 +4,7 @@ use std::io::{BufWriter, Write};
 use std::ops::Div;
 use std::path::Path;
 
-use async_kartoffel::RadarSize;
+use async_kartoffel_generic::RadarSize;
 use kartoffel_gps::GlobalPos;
 use kartoffel_gps::gps::{MapSection, MapSectionTrait};
 use kartoffel_gps::pos::pos_east_south;
@@ -20,7 +20,7 @@ fn main() {
     let path = Path::new(&env::var("OUT_DIR").unwrap()).join("codegen.rs");
     let file = &mut BufWriter::new(File::create(&path).unwrap());
 
-    let map_path = "maps/map-grotta.txt";
+    let map_path = "maps/map-tiny.txt";
     println!("build.rs analysing map {}", map_path);
     println!("cargo::rerun-if-changed={}", map_path);
     let map = &Map::from_path(Path::new(map_path)).unwrap();

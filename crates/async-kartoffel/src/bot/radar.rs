@@ -1,13 +1,12 @@
+use async_kartoffel_generic::{Local, RadarScanTrait, RadarSize, Tile, Vec2};
 use critical_section::Mutex;
 use kartoffel::{is_radar_ready, radar_read, radar_scan};
 
-use crate::{Coords, Local, Tile, Vec2};
 use core::{
     cell::Cell,
     future::poll_fn,
     marker::PhantomData,
     num::NonZeroU64,
-    ops::RangeInclusive,
     task::{Poll, Waker},
 };
 
@@ -141,67 +140,6 @@ impl Guard {
     }
 }
 
-mod private {
-    pub trait Sealed {}
-}
-pub trait RadarSize:
-    private::Sealed + Clone + Copy + PartialEq + Eq + PartialOrd + Ord + 'static
-{
-    const R: u8;
-    const D: u8;
-    fn range() -> RangeInclusive<i8> {
-        -(Self::R as i8)..=Self::R as i8
-    }
-    fn contains(vec: Vec2<impl Coords>) -> bool {
-        let (i1, i2) = vec.to_generic();
-        -(Self::R as i16) <= i1
-            && -(Self::R as i16) <= i2
-            && (Self::R as i16) >= i1
-            && (Self::R as i16) >= i2
-    }
-    fn to_str() -> &'static str;
-}
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum D3 {}
-impl private::Sealed for D3 {}
-impl RadarSize for D3 {
-    const R: u8 = 1;
-    const D: u8 = 3;
-    fn to_str() -> &'static str {
-        "D3"
-    }
-}
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum D5 {}
-impl private::Sealed for D5 {}
-impl RadarSize for D5 {
-    const R: u8 = 2;
-    const D: u8 = 5;
-    fn to_str() -> &'static str {
-        "D5"
-    }
-}
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum D7 {}
-impl private::Sealed for D7 {}
-impl RadarSize for D7 {
-    const R: u8 = 3;
-    const D: u8 = 7;
-    fn to_str() -> &'static str {
-        "D7"
-    }
-}
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum D9 {}
-impl private::Sealed for D9 {}
-impl RadarSize for D9 {
-    const R: u8 = 4;
-    const D: u8 = 9;
-    fn to_str() -> &'static str {
-        "D9"
-    }
-}
-
 #[non_exhaustive]
 pub struct RadarScan<Size: RadarSize>(PhantomData<Size>);
 
@@ -213,15 +151,30 @@ impl<Size: RadarSize> RadarScan<Size> {
             .then_some((dx as i8, dy as i8))
     }
     #[inline(always)]
-    pub fn to_vec(dx: i8, dy: i8) -> Vec2<Local> {
+    fn to_vec(dx: i8, dy: i8) -> Vec2<Local> {
         Vec2::new_front_right((-dy).into(), dx.into())
     }
 
-    pub fn contains(&self, vec: Vec2<Local>) -> bool {
+    #[inline(always)]
+    pub fn at_unchecked(&self, dx: i8, dy: i8) -> char {
+        radar_read(Size::D.into(), dx, dy, 0) as u8 as char
+    }
+
+    /// generate weak (does not block new scans) reference
+    pub fn weak(&self) -> RadarScanWeak<Size> {
+        RadarScanWeak {
+            uuid: Guard::get_active_uuid(),
+            _phantom: PhantomData,
+        }
+    }
+}
+
+impl<Size: RadarSize> RadarScanTrait<Size> for RadarScan<Size> {
+    fn contains(&self, vec: Vec2<Local>) -> bool {
         Self::radar_indices(vec).is_some()
     }
 
-    pub fn at(&self, vec: Vec2<Local>) -> Option<Tile> {
+    fn at(&self, vec: Vec2<Local>) -> Option<Tile> {
         if let Some((dx, dy)) = Self::radar_indices(vec) {
             // unwrap: unknown tile means error
             Some(Tile::from_char(self.at_unchecked(dx, dy)).expect("encountered unknown tile"))
@@ -230,13 +183,7 @@ impl<Size: RadarSize> RadarScan<Size> {
         }
     }
 
-    #[inline(always)]
-    pub fn at_unchecked(&self, dx: i8, dy: i8) -> char {
-        radar_read(Size::D.into(), dx, dy, 0) as u8 as char
-    }
-
-    #[inline(always)]
-    pub fn bot_at(&self, vec: Vec2<Local>) -> Option<NonZeroU64> {
+    fn bot_at(&self, vec: Vec2<Local>) -> Option<NonZeroU64> {
         if let Some((dx, dy)) = Self::radar_indices(vec) {
             let d1 = radar_read(Size::D.into(), dx, dy, 1) as u64;
             let d2 = radar_read(Size::D.into(), dx, dy, 2) as u64;
@@ -247,7 +194,7 @@ impl<Size: RadarSize> RadarScan<Size> {
     }
 
     /// Scanned tiles matching tile excluding (0, 0), this is e.g. useful to find only enemy bots
-    pub fn iter_tile(&self, tile: Tile) -> impl Iterator<Item = Vec2<Local>> + use<'_, Size> {
+    fn iter_tile(&self, tile: Tile) -> impl Iterator<Item = Vec2<Local>> + use<'_, Size> {
         Size::range().flat_map(move |dx| {
             Size::range()
                 .filter(move |dy| {
@@ -258,7 +205,7 @@ impl<Size: RadarSize> RadarScan<Size> {
     }
 
     /// iterate over scanned tiles excluding (0, 0)
-    pub fn iter(&self) -> impl Iterator<Item = (Vec2<Local>, Tile)> + use<'_, Size> {
+    fn iter(&self) -> impl Iterator<Item = (Vec2<Local>, Tile)> + use<'_, Size> {
         Size::range().flat_map(move |dx| {
             Size::range()
                 .filter(move |dy| !(dx == 0 && *dy == 0))
@@ -269,14 +216,6 @@ impl<Size: RadarSize> RadarScan<Size> {
                     )
                 })
         })
-    }
-
-    /// generate weak (does not block new scans) reference
-    pub fn weak(&self) -> RadarScanWeak<Size> {
-        RadarScanWeak {
-            uuid: Guard::get_active_uuid(),
-            _phantom: PhantomData,
-        }
     }
 }
 
@@ -309,6 +248,7 @@ impl<Size: RadarSize> RadarScanWeak<Size> {
 #[cfg(test)]
 mod tests {
 
+    use async_kartoffel_generic::{D3, D5, D7, D9};
     use kartoffel::println;
 
     use super::*;

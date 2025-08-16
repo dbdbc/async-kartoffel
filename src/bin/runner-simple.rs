@@ -4,12 +4,12 @@
 #![test_runner(test_kartoffel::runner)]
 #![feature(iter_next_chunk)]
 
-use async_kartoffel::{
-    println, Arm, Bot, Direction, Duration, Instant, Local, Motor, Position, Radar, RadarScan,
-    RadarSize, Rotation, Tile, Timer, Vec2, D7,
+use async_kartoffel::{Arm, Bot, Instant, Motor, Radar, RadarScan, Timer, println};
+use async_kartoffel_generic::{
+    D7, Direction, Duration, Local, Position, RadarScanTrait, RadarSize, Rotation, Tile, Vec2,
 };
-use embassy_executor::{task, Executor};
-use embassy_futures::select::{select, select3, Either, Either3};
+use embassy_executor::{Executor, task};
+use embassy_futures::select::{Either, Either3, select, select3};
 use heapless::Vec;
 use static_cell::StaticCell;
 
@@ -32,10 +32,28 @@ fn main() {
 }
 
 /// translation is given in original coordinates, so not rotated yet
-#[derive(Default)]
+#[derive(Default, Clone, Copy)]
 pub struct Transform {
     pub vec: Vec2<Local>,
     pub rotation: Rotation,
+}
+
+impl From<Vec2<Local>> for Transform {
+    fn from(value: Vec2<Local>) -> Self {
+        Self {
+            vec: value,
+            rotation: Rotation::Id,
+        }
+    }
+}
+
+impl From<Rotation> for Transform {
+    fn from(value: Rotation) -> Self {
+        Self {
+            vec: Vec2::default(),
+            rotation: value,
+        }
+    }
 }
 
 impl Transform {
@@ -389,6 +407,23 @@ fn movement(
     }
 }
 
+/// get a list of all bots (that have not yet been stabbed) in the scan area
+fn get_bot_list<const MAX_N_BOTS: usize, D: RadarSize>(
+    transform: Transform,
+    has_stabbed: bool,
+    radar_scan: &RadarScan<D>,
+) -> Vec<Vec2<Local>, MAX_N_BOTS> {
+    let stabbed_location = has_stabbed.then_some(transform.chain(Vec2::new_front(1).into()).vec);
+    if let Some(stabbed_location) = stabbed_location {
+        radar_scan
+            .iter_tile(Tile::Bot)
+            .filter(|&v| v != stabbed_location)
+            .collect()
+    } else {
+        radar_scan.iter_tile(Tile::Bot).collect()
+    }
+}
+
 #[task]
 async fn foreground(mut bot: Bot) -> ! {
     // settings
@@ -414,24 +449,7 @@ async fn foreground(mut bot: Bot) -> ! {
             continue 'main_loop;
         } else {
             let after_scan = Transform::from_motor_action(action.motor);
-            let stabbed = action
-                .arm
-                .is_some()
-                .then_some(after_scan.chain_vec(Vec2::new_front(1)).vec);
-
-            let mut bots = Vec::<Vec2<Local>, MAX_N_BOTS>::new();
-            for x1 in D7::range() {
-                for x2 in D7::range() {
-                    if radar_scan.at_unchecked(x1, x2) == Tile::Bot.to_char()
-                        && (x1 != 0 || x2 != 0)
-                    {
-                        let bot = RadarScan::<D7>::to_vec(x1, x2);
-                        if stabbed != Some(bot) {
-                            bots.push(bot).unwrap();
-                        }
-                    }
-                }
-            }
+            let bots = get_bot_list::<MAX_N_BOTS, _>(after_scan, action.arm.is_some(), radar_scan);
             let can_stab = arm.is_ready();
             let action = movement(
                 pos,

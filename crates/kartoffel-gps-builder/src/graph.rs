@@ -84,11 +84,11 @@ pub struct Graph<
 }
 
 impl<
-        TStart,
-        TDestination,
-        MapStart: GraphMapping<TStart>,
-        MapDestination: GraphMapping<TDestination>,
-    > PartialEq for Graph<TStart, TDestination, MapStart, MapDestination>
+    TStart,
+    TDestination,
+    MapStart: GraphMapping<TStart>,
+    MapDestination: GraphMapping<TDestination>,
+> PartialEq for Graph<TStart, TDestination, MapStart, MapDestination>
 {
     fn eq(&self, other: &Self) -> bool {
         self.map_start.equals(&other.map_start)
@@ -98,11 +98,11 @@ impl<
 }
 
 impl<
-        TStart,
-        TDestination,
-        MapStart: GraphMapping<TStart>,
-        MapDestination: GraphMapping<TDestination>,
-    > Clone for Graph<TStart, TDestination, MapStart, MapDestination>
+    TStart,
+    TDestination,
+    MapStart: GraphMapping<TStart>,
+    MapDestination: GraphMapping<TDestination>,
+> Clone for Graph<TStart, TDestination, MapStart, MapDestination>
 {
     fn clone(&self) -> Self {
         Self {
@@ -115,11 +115,11 @@ impl<
 }
 
 impl<
-        TStart,
-        TDestination,
-        MapStart: GraphMapping<TStart>,
-        MapDestination: GraphMapping<TDestination>,
-    > Graph<TStart, TDestination, MapStart, MapDestination>
+    TStart,
+    TDestination,
+    MapStart: GraphMapping<TStart>,
+    MapDestination: GraphMapping<TDestination>,
+> Graph<TStart, TDestination, MapStart, MapDestination>
 {
     pub fn new(map_start: MapStart, map_destination: MapDestination) -> Self {
         let data = Array2::default((map_start.len(), map_destination.len()));
@@ -238,8 +238,8 @@ impl<
         let mut ret = self.clone();
         for i_start in 0..ret.len_start() {
             for i_dest in 0..ret.len_destination() {
-                if let Some(weight) = ret.get(i_start, i_dest) {
-                    if !f(
+                if let Some(weight) = ret.get(i_start, i_dest)
+                    && !f(
                         ret.map_start
                             .get_value(i_start)
                             .expect("indices should be dense"),
@@ -247,9 +247,9 @@ impl<
                             .get_value(i_dest)
                             .expect("indices should be dense"),
                         weight,
-                    ) {
-                        ret.remove_edge(i_start, i_dest);
-                    }
+                    )
+                {
+                    ret.remove_edge(i_start, i_dest);
                 }
             }
         }

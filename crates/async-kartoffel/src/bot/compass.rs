@@ -1,10 +1,9 @@
 use core::{future::poll_fn, task::Poll};
 
+use async_kartoffel_generic::Direction;
 use kartoffel::compass_dir;
 
-use crate::Direction;
-
-use super::{error::NotReady, Singleton};
+use super::{Singleton, error::NotReady};
 
 #[non_exhaustive]
 pub struct Compass;

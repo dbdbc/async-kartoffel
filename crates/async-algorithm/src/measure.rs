@@ -1,4 +1,4 @@
-use async_kartoffel::{Coords, Direction, Global, Rotation, Vec2};
+use async_kartoffel_generic::{Coords, Direction, Global, Rotation, Vec2};
 
 pub trait DistanceMeasure: Clone + 'static {
     fn measure<C: Coords>(vec: Vec2<C>) -> u16;

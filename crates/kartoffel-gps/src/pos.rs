@@ -1,4 +1,4 @@
-use async_kartoffel::{PositionAnchor, Vec2};
+use async_kartoffel_generic::{PositionAnchor, Vec2};
 
 use crate::GlobalPos;
 

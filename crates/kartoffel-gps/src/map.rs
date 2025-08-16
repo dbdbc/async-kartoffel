@@ -1,4 +1,4 @@
-use async_kartoffel::{Global, Vec2};
+use async_kartoffel_generic::{Global, Vec2};
 
 use crate::GlobalPos;
 

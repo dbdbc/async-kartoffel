@@ -6,8 +6,4 @@ edition.workspace = true
 [dependencies]
 heapless.workspace = true
 embassy-futures.workspace = true
-async-kartoffel = {path = "../../crates/async-kartoffel", default-features = false}
-test-kartoffel = {path = "../../crates/test-kartoffel", optional = true}
-
-[features]
-default = ["test-kartoffel"]
+async-kartoffel-generic = {path = "../../crates/async-kartoffel-generic"}

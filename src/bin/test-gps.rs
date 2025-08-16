@@ -4,8 +4,9 @@
 #![test_runner(test_kartoffel::runner)]
 #![feature(iter_next_chunk)]
 
-use async_kartoffel::{println, Bot, Instant, Rotation, Vec2, D7 as DRadar};
-use embassy_executor::{task, Executor};
+use async_kartoffel::{Bot, Instant, println};
+use async_kartoffel_generic::{D7 as DRadar, RadarScanTrait, Rotation, Vec2};
+use embassy_executor::{Executor, task};
 use example_kartoffels::{get_global_pos, global_pos_entries};
 use kartoffel_gps::gps::{MapSection, MapSectionTrait};
 use static_cell::StaticCell;

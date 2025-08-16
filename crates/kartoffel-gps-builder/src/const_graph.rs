@@ -68,10 +68,10 @@ impl ConstSparseGraphBuilder {
     }
 
     pub fn is_valid(&self) -> bool {
-        if let Some(max_index) = self.max_index {
-            if usize::from(max_index) >= self.nodes.len() {
-                return false;
-            }
+        if let Some(max_index) = self.max_index
+            && usize::from(max_index) >= self.nodes.len()
+        {
+            return false;
         }
         if self.nodes.len() > u16::MAX.into() {
             return false;

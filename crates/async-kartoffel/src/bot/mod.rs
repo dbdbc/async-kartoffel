@@ -4,10 +4,10 @@ pub mod error;
 mod motor;
 mod radar;
 
-pub use self::arm::Arm;
-pub use self::compass::Compass;
-pub use self::motor::Motor;
-pub use self::radar::{Radar, RadarScan, RadarScanWeak, RadarSize, D3, D5, D7, D9};
+pub use arm::Arm;
+pub use compass::Compass;
+pub use motor::Motor;
+pub use radar::{Radar, RadarScan, RadarScanWeak};
 
 pub struct Bot {
     pub motor: Motor,

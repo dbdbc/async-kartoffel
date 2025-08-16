@@ -4,8 +4,9 @@
 #![test_runner(test_kartoffel::runner)]
 #![feature(iter_next_chunk)]
 
-use async_kartoffel::{println, Bot, Duration, Tile, Timer, Vec2, D3};
-use embassy_executor::{task, Executor};
+use async_kartoffel::{Bot, Duration, Timer, println};
+use async_kartoffel_generic::{D3, RadarScanTrait, Tile, Vec2};
+use embassy_executor::{Executor, task};
 use static_cell::StaticCell;
 
 #[unsafe(no_mangle)]

@@ -1,8 +1,9 @@
 #![no_main]
 #![no_std]
 
-use async_kartoffel::{println, Bot, Duration, Timer, Vec2, D3};
-use embassy_executor::{task, Executor};
+use async_kartoffel::{Bot, Duration, Timer, println};
+use async_kartoffel_generic::{D3, RadarScanTrait, Vec2};
+use embassy_executor::{Executor, task};
 use static_cell::StaticCell;
 
 #[unsafe(no_mangle)]

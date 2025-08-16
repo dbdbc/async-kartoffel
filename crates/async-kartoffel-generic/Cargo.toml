@@ -1,0 +1,4 @@
+[package]
+name = "async-kartoffel-generic"
+version.workspace = true
+edition.workspace = true

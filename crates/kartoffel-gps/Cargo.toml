@@ -1,15 +1,11 @@
 [package]
 name = "kartoffel-gps"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
 
 [dependencies]
-async-kartoffel = {path = "../../crates/async-kartoffel", default-features = false}
-async-algorithm = {path = "../../crates/async-algorithm", default-features = false}
-test-kartoffel = {path = "../../crates/test-kartoffel", optional = true}
+async-kartoffel-generic = {path = "../../crates/async-kartoffel-generic"}
+async-algorithm = {path = "../../crates/async-algorithm"}
 phf_shared.workspace = true
 heapless.workspace = true
 rand.workspace = true
-
-[features]
-default = ["test-kartoffel"]

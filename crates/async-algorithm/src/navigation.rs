@@ -1,6 +1,6 @@
 use core::num::NonZeroU16;
 
-use async_kartoffel::{Direction, Position};
+use async_kartoffel_generic::{Direction, Position};
 use heapless::{FnvIndexMap, Vec};
 
 use super::{

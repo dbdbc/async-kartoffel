@@ -1,6 +1,6 @@
 use core::{fmt::Display, hash::Hash};
 
-use async_kartoffel::{Direction, Global, RadarScan, RadarSize, Vec2, D3, D5, D7, D9};
+use async_kartoffel_generic::{D3, D5, D7, D9, Direction, Global, RadarScanTrait, RadarSize, Vec2};
 
 #[derive(Debug, Eq, PartialEq, PartialOrd, Ord, Hash, Clone, Copy)]
 pub struct OutOfBounds;
@@ -9,7 +9,7 @@ pub trait MapSectionTrait: Default + Hash + PartialEq + Eq + PartialOrd + Ord + 
     type Size: RadarSize;
     type Compressed: phf_shared::FmtConst + phf_shared::PhfHash + Eq + Hash;
     fn compressed_type() -> &'static str;
-    fn from_scan(scan: &RadarScan<Self::Size>, facing: Direction) -> Self {
+    fn from_scan(scan: &impl RadarScanTrait<Self::Size>, facing: Direction) -> Self {
         let mut ret = Self::default();
         for i_east in Self::Size::range() {
             for i_south in Self::Size::range() {

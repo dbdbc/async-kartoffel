@@ -12,21 +12,25 @@ checksum = "6b964d184e89d9b6b67dd2715bc8e74cf3107fb2b529990c90cf517326150bf4"
 name = "async-algorithm"
 version = "0.7.1"
 dependencies = [
- "async-kartoffel",
+ "async-kartoffel-generic",
  "embassy-futures",
  "heapless",
- "test-kartoffel",
 ]
 
 [[package]]
 name = "async-kartoffel"
 version = "0.7.1"
 dependencies = [
+ "async-kartoffel-generic",
  "critical-section",
  "heapless",
  "kartoffel",
  "test-kartoffel",
 ]
+
+[[package]]
+name = "async-kartoffel-generic"
+version = "0.7.1"
 
 [[package]]
 name = "autocfg"
@@ -172,6 +176,7 @@ version = "0.7.1"
 dependencies = [
  "async-algorithm",
  "async-kartoffel",
+ "async-kartoffel-generic",
  "embassy-executor",
  "embassy-futures",
  "embassy-sync",
@@ -293,22 +298,21 @@ dependencies = [
 
 [[package]]
 name = "kartoffel-gps"
-version = "0.1.0"
+version = "0.7.1"
 dependencies = [
  "async-algorithm",
- "async-kartoffel",
+ "async-kartoffel-generic",
  "heapless",
  "phf_shared",
  "rand 0.9.2",
- "test-kartoffel",
 ]
 
 [[package]]
 name = "kartoffel-gps-builder"
-version = "0.1.0"
+version = "0.7.1"
 dependencies = [
  "anyhow",
- "async-kartoffel",
+ "async-kartoffel-generic",
  "kartoffel-gps",
  "ndarray",
  "ndarray-stats",

@@ -4,13 +4,14 @@
 #![test_runner(test_kartoffel::runner)]
 
 use alloc::{boxed::Box, string::ToString};
-use async_kartoffel::{print, println, Duration, Position, Timer, Vec2};
+use async_kartoffel::{Duration, KartoffelClock, Timer, print, println};
+use async_kartoffel_generic::{Position, Vec2};
 
 use async_algorithm::{ChunkMapHash, ChunkTerrain, Map, Navigation, StatsDog, Terrain};
 use core::ops::Deref;
 use core::{num::NonZeroU16, ops::RangeInclusive};
-use embassy_executor::{task, Executor};
-use embassy_futures::select::{select, Either};
+use embassy_executor::{Executor, task};
+use embassy_futures::select::{Either, select};
 use static_cell::StaticCell;
 
 extern crate alloc;
@@ -173,7 +174,7 @@ async fn nav() -> ! {
     nav.initialize(start, destination);
 
     let walkable = |pos| map.get(pos).is_some_and(|t| t.is_known_walkable());
-    let mut dog = StatsDog::new();
+    let mut dog = StatsDog::<KartoffelClock>::new();
     loop {
         let res = dog
             .benchmark(select(

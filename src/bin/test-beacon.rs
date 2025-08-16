@@ -4,19 +4,19 @@
 #![test_runner(test_kartoffel::runner)]
 #![feature(iter_next_chunk)]
 
-use async_kartoffel::{
-    println, random_seed, Bot, Direction, Duration, Instant, RadarScan, RadarSize, Rotation, Timer,
-    Vec2, D3, D7 as DRadar,
+use async_kartoffel::{Bot, Duration, Instant, RadarScan, Timer, println, random_seed};
+use async_kartoffel_generic::{
+    D3, D7 as DRadar, Direction, RadarScanTrait, RadarSize, Rotation, Vec2,
 };
-use embassy_executor::{task, Executor};
+use embassy_executor::{Executor, task};
 use example_kartoffels::{beacon_info, get_global_pos, get_navigator_info, navigator_resources};
 use kartoffel_gps::{
+    GlobalPos,
     beacon::Navigator,
     gps::{MapSection, MapSectionTrait},
     pos::pos_east_south,
-    GlobalPos,
 };
-use rand::{rngs::SmallRng, seq::IndexedRandom, SeedableRng};
+use rand::{SeedableRng, rngs::SmallRng, seq::IndexedRandom};
 use static_cell::StaticCell;
 
 #[unsafe(no_mangle)]
@@ -86,18 +86,19 @@ async fn main_task(mut bot: Bot) -> ! {
                 // position update if out of sync
                 let scan = bot.radar.scan::<DRadar>().await;
                 if let Some(new_pos) = get_global_pos(&MapSection::from_scan(&scan, facing))
-                    && new_pos != pos {
-                        println!("correction pos: {} -> {}", pos, new_pos);
-                        pos = new_pos;
-                        navigator = match navigator.set_start(pos).compute().await {
-                            Ok(nav) => nav,
-                            Err(nav) => {
-                                // panic because position is known exactly, so this means
-                                // navigation is really impossible
-                                panic!("update comp failed: {:?}", nav.get_error())
-                            }
-                        };
-                    }
+                    && new_pos != pos
+                {
+                    println!("correction pos: {} -> {}", pos, new_pos);
+                    pos = new_pos;
+                    navigator = match navigator.set_start(pos).compute().await {
+                        Ok(nav) => nav,
+                        Err(nav) => {
+                            // panic because position is known exactly, so this means
+                            // navigation is really impossible
+                            panic!("update comp failed: {:?}", nav.get_error())
+                        }
+                    };
+                }
             }
 
             let time_switch = Instant::now();

@@ -6,19 +6,22 @@
 
 use async_algorithm::{Breakpoint, DistanceManhattan, DistanceMeasure, StatsDog};
 use async_kartoffel::{
-    exit, println, Arm, Bot, Direction, Duration, Instant, Local, Motor, Position, PositionAnchor,
-    Radar, RadarScan, RadarSize, Rotation, Tile, Timer, Vec2, D7,
+    Arm, Bot, Instant, KartoffelClock, Motor, Radar, RadarScan, Timer, exit, println,
 };
-use embassy_executor::{task, Executor};
-use embassy_futures::select::{select, select3, Either, Either3};
+use async_kartoffel_generic::{
+    D7, Direction, Duration, Local, Position, PositionAnchor, RadarScanTrait, RadarSize, Rotation,
+    Tile, Vec2,
+};
+use embassy_executor::{Executor, task};
+use embassy_futures::select::{Either, Either3, select, select3};
 use embassy_sync::{blocking_mutex::raw::NoopRawMutex, channel::Channel, signal::Signal};
 use example_kartoffels::{get_global_pos, navigator_resources};
 use heapless::Vec;
 use kartoffel_gps::{
+    GlobalPos,
     beacon::{Navigator, NavigatorEnum, NavigatorError},
     gps::{MapSection, MapSectionTrait},
     pos::pos_east_south,
-    GlobalPos,
 };
 use static_cell::StaticCell;
 
@@ -298,9 +301,10 @@ async fn execute_with_arm_timeout(
         && matches!(
             select(radar.wait(), motor_action.execute(motor)).await,
             Either::First(_)
-        ) {
-            return (Transform::identity(), ExecutionResult::RadarReady);
-        }
+        )
+    {
+        return (Transform::identity(), ExecutionResult::RadarReady);
+    }
     (
         Transform::from_motor_action(action.motor),
         if action.arm.is_some() {
@@ -590,18 +594,14 @@ fn get_bot_list<const MAX_N_BOTS: usize, D: RadarSize>(
     radar_scan: &RadarScan<D>,
 ) -> Vec<Vec2<Local>, MAX_N_BOTS> {
     let stabbed_location = has_stabbed.then_some(transform.chain(Vec2::new_front(1).into()).vec);
-    let mut bots = Vec::<Vec2<Local>, MAX_N_BOTS>::new();
-    for x1 in D7::range() {
-        for x2 in D7::range() {
-            if radar_scan.at_unchecked(x1, x2) == Tile::Bot.to_char() && (x1 != 0 || x2 != 0) {
-                let bot = RadarScan::<D>::to_vec(x1, x2);
-                if stabbed_location != Some(bot) {
-                    bots.push(bot).unwrap();
-                }
-            }
-        }
+    if let Some(stabbed_location) = stabbed_location {
+        radar_scan
+            .iter_tile(Tile::Bot)
+            .filter(|&v| v != stabbed_location)
+            .collect()
+    } else {
+        radar_scan.iter_tile(Tile::Bot).collect()
     }
-    bots
 }
 
 /// Navigation, Position, and Orientation
@@ -668,10 +668,11 @@ impl BotNavState {
     /// update global position if new scan is available to analyse
     fn analyse_scan(&mut self, radar_scan: &RadarScan<D7>) {
         if let Some(pos) = get_global_pos(&MapSection::from_scan(radar_scan, self.facing))
-            && self.global_pos.is_none_or(|old_pos| old_pos != pos) {
-                self.global_pos = Some(pos);
-                println!("pos update {}", pos);
-            }
+            && self.global_pos.is_none_or(|old_pos| old_pos != pos)
+        {
+            self.global_pos = Some(pos);
+            println!("pos update {}", pos);
+        }
     }
 
     /// get latest navigation update
@@ -932,7 +933,7 @@ async fn navigation(sync: DataSync) -> ! {
 
 #[task]
 async fn watchdog(signal_complete: &'static Signal<NoopRawMutex, ()>) -> ! {
-    let mut dog = StatsDog::new();
+    let mut dog = StatsDog::<KartoffelClock>::new();
     loop {
         dog.restart_timer();
         Breakpoint::new().await;

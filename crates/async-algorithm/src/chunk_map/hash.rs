@@ -1,9 +1,9 @@
 use core::marker::PhantomData;
 
-use async_kartoffel::Position;
+use async_kartoffel_generic::Position;
 use heapless::FnvIndexMap;
 
-use crate::{error::OutOfMemory, Map};
+use crate::{Map, error::OutOfMemory};
 
 use super::{Chunk, ChunkLocation, ChunkMap};
 

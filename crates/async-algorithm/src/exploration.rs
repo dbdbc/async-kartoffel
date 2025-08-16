@@ -2,14 +2,14 @@ use core::{convert::identity, fmt::Display, marker::PhantomData};
 
 use heapless::{FnvIndexSet, Vec};
 
-use async_kartoffel::{Position, RadarScan, RadarSize, Vec2};
+use async_kartoffel_generic::{Position, RadarScanTrait, RadarSize, Vec2};
 
 use crate::Breakpoint;
 
 use super::{
+    Map,
     error::{MapError, MapInconsistent, OutOfMemory},
     terrain::Terrain,
-    Map,
 };
 
 #[derive(Debug)]
@@ -196,7 +196,7 @@ impl<const N: usize, T: Map<Terrain>> Exploration<N, T> {
     pub fn activate<Size: RadarSize>(
         &mut self,
         center: Position,
-        _scan: &RadarScan<Size>,
+        _scan: &impl RadarScanTrait<Size>,
     ) -> Result<(), OutOfMemory> {
         self.activate_any::<Size>(center)
     }

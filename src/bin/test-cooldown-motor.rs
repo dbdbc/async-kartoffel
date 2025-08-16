@@ -3,8 +3,8 @@
 #![feature(custom_test_frameworks)]
 #![test_runner(test_kartoffel::runner)]
 
-use async_kartoffel::{println, Bot, Instant};
-use embassy_executor::{task, Executor};
+use async_kartoffel::{Bot, Instant, println};
+use embassy_executor::{Executor, task};
 use static_cell::StaticCell;
 
 #[unsafe(no_mangle)]

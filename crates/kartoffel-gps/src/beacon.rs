@@ -2,11 +2,11 @@ use core::{convert::identity, future::Future, mem};
 
 use alloc::boxed::Box;
 use async_algorithm::{Breakpoint, DistanceManhattan, DistanceMeasure, DistanceMin};
-use async_kartoffel::{Direction, Vec2};
+use async_kartoffel_generic::{Direction, Vec2};
 
-use heapless::{binary_heap::Min, BinaryHeap, Vec};
+use heapless::{BinaryHeap, Vec, binary_heap::Min};
 
-use crate::{const_graph::Graph, map::TrueMap, GlobalPos};
+use crate::{GlobalPos, const_graph::Graph, map::TrueMap};
 
 use core::marker::PhantomData;
 
@@ -195,14 +195,14 @@ pub trait NavigatorResources {
 }
 
 impl<
-        const MAX_PATH_LEN: usize,
-        const MAX_ENTRY_EXIT: usize,
-        const TRIV_BUFFER: usize,
-        const NODE_BUFFER: usize,
-        const ACTIVE_BUFFER: usize,
-        T: TrueMap + 'static,
-        G: Graph + 'static,
-    > NavigatorResources
+    const MAX_PATH_LEN: usize,
+    const MAX_ENTRY_EXIT: usize,
+    const TRIV_BUFFER: usize,
+    const NODE_BUFFER: usize,
+    const ACTIVE_BUFFER: usize,
+    T: TrueMap + 'static,
+    G: Graph + 'static,
+> NavigatorResources
     for NavigatorResourcesImpl<
         MAX_PATH_LEN,
         MAX_ENTRY_EXIT,
@@ -287,14 +287,14 @@ impl<
 }
 
 impl<
-        const MAX_PATH_LEN: usize,
-        const MAX_ENTRY_EXIT: usize,
-        const TRIV_BUFFER: usize,
-        const NODE_BUFFER: usize,
-        const ACTIVE_BUFFER: usize,
-        T: TrueMap + 'static,
-        G: Graph + 'static,
-    >
+    const MAX_PATH_LEN: usize,
+    const MAX_ENTRY_EXIT: usize,
+    const TRIV_BUFFER: usize,
+    const NODE_BUFFER: usize,
+    const ACTIVE_BUFFER: usize,
+    T: TrueMap + 'static,
+    G: Graph + 'static,
+>
     NavigatorResourcesImpl<
         MAX_PATH_LEN,
         MAX_ENTRY_EXIT,
@@ -384,13 +384,13 @@ mod private {
 //
 pub mod states {
     use crate::{
+        GlobalPos,
         beacon::{
             Navigator, NavigatorEnum, NavigatorError, NavigatorState, NavigatorStateFailed,
             NavigatorStateHasDestination, NavigatorStateHasDestinationNoPath,
             NavigatorStateHasPath, NavigatorStateHasStart, NavigatorStateResettable,
             ScheduledUpdate,
         },
-        GlobalPos,
     };
 
     // path is stored in shared state because of const generics ergonomics and potential buffer size
@@ -1391,12 +1391,12 @@ mod tests {
         sync::atomic::{AtomicBool, Ordering},
     };
 
-    use async_kartoffel::{print, println, Global};
+    use async_kartoffel::{Global, print, println};
     use rand::{
+        SeedableRng,
         distr::{Distribution, Uniform},
         rngs::SmallRng,
         seq::IteratorRandom,
-        SeedableRng,
     };
 
     use crate::pos::pos_east_south;
@@ -1405,7 +1405,7 @@ mod tests {
 
     use super::*;
     use test_kartoffel::{
-        assert, assert_eq, assert_err, assert_none, option_unwrap, result_unwrap, TestError,
+        TestError, assert, assert_eq, assert_err, assert_none, option_unwrap, result_unwrap,
     };
 
     struct TestMap<const WIDTH: usize, const HEIGHT: usize> {

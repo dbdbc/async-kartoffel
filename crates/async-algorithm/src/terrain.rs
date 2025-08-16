@@ -1,8 +1,10 @@
 use heapless::{FnvIndexSet, Vec};
 
-use async_kartoffel::{Direction, Global, Position, RadarScan, RadarSize, Rotation, Vec2};
+use async_kartoffel_generic::{
+    Direction, Global, Position, RadarScanTrait, RadarSize, Rotation, Vec2,
+};
 
-use crate::{chunk_map::to_chunk_pos, Breakpoint};
+use crate::{Breakpoint, chunk_map::to_chunk_pos};
 
 use super::{
     chunk_map::{Chunk, ChunkIndex, ChunkLocation, ChunkMap},
@@ -114,7 +116,7 @@ impl ChunkTerrain {
     /// to walked into another bot, and is probably really annoying to repair.
     async fn update_from_radar<Size: RadarSize>(
         &mut self,
-        radar: &RadarScan<Size>,
+        radar: &impl RadarScanTrait<Size>,
         center: Vec2<Global>,
         direction: Direction,
     ) -> Result<Self, MapInconsistent> {
@@ -149,7 +151,7 @@ impl ChunkTerrain {
 
 pub async fn update_chunk_map<M: ChunkMap<Terrain, ChunkTerrain>, Size: RadarSize>(
     map: &mut M,
-    radar: &RadarScan<Size>,
+    radar: &impl RadarScanTrait<Size>,
     pos: Position,
     direction: Direction,
 ) -> Result<(), MapError> {

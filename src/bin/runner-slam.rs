@@ -8,19 +8,23 @@ use alloc::boxed::Box;
 
 use alloc::string::ToString;
 use async_algorithm::{
-    distance_walk_with_rotation, update_chunk_map, Breakpoint, ChunkMapHash, ChunkTerrain,
-    DistanceBotWalk, DistanceMeasure, Exploration, Map, Navigation, StatsDog, Terrain,
+    Breakpoint, ChunkMapHash, ChunkTerrain, DistanceBotWalk, DistanceMeasure, Exploration, Map,
+    Navigation, StatsDog, Terrain, distance_walk_with_rotation, update_chunk_map,
 };
+use async_kartoffel::Duration;
 use async_kartoffel::{
-    print, println, Arm, Bot, Direction, Duration, Instant, Local, Motor, Position, Radar,
-    RadarScan, RadarScanWeak, RadarSize, Rotation, Tile, Timer, Vec2, D3,
+    Arm, Bot, Instant, KartoffelClock, Motor, Radar, RadarScan, RadarScanWeak, Timer, print,
+    println,
+};
+use async_kartoffel_generic::{
+    D3, Direction, Local, Position, RadarScanTrait, RadarSize, Rotation, Tile, Vec2,
 };
 use core::num::NonZeroU16;
 use core::ops::Deref;
 use core::ops::DerefMut;
 use core::ops::RangeInclusive;
-use embassy_executor::{task, Executor};
-use embassy_futures::select::{select, select3, Either, Either3};
+use embassy_executor::{Executor, task};
+use embassy_futures::select::{Either, Either3, select, select3};
 use embassy_sync::{blocking_mutex::raw::NoopRawMutex, signal::Signal};
 use heapless::Vec;
 use static_cell::StaticCell;
@@ -519,55 +523,58 @@ async fn background(
         }
         // destination at border of known reachable
         if destination.is_none()
-            && let Some(mut unknown_reachables) = exploration.border(&map) {
-                fn update_closest(
-                    closest: &mut Option<(Position, u16)>,
-                    candidate: Option<(Position, u16)>,
-                ) {
-                    if let Some(candidate) = candidate
-                        && closest.is_none_or(|(_, dist_old)| candidate.1 < dist_old) {
-                            *closest = Some(candidate);
-                        }
-                }
-                fn get_closest(
-                    iter: impl Iterator<Item = Position>,
-                    reference: Position,
-                ) -> Option<(Position, u16)> {
-                    iter.map(|pos_border| {
-                        (pos_border, DistanceBotWalk::measure(pos_border - reference))
-                    })
-                    .min_by_key(|&(_, dist)| dist)
-                }
-
-                let mut closest = None;
-                loop {
-                    // split iterator into chunks to prevent to many await points
-                    match unknown_reachables.next_chunk::<5>() {
-                        Ok(chunk) => {
-                            update_closest(&mut closest, get_closest(chunk.into_iter(), scan_pos));
-                        }
-                        Err(iter) => {
-                            update_closest(&mut closest, get_closest(iter, scan_pos));
-                            break;
-                        }
-                    }
-                    Breakpoint::new().await;
-                }
-
-                if let Some((destination_pos, _)) = closest {
-                    destination = Some(destination_pos);
-                    nav.initialize(scan_pos, destination_pos);
+            && let Some(mut unknown_reachables) = exploration.border(&map)
+        {
+            fn update_closest(
+                closest: &mut Option<(Position, u16)>,
+                candidate: Option<(Position, u16)>,
+            ) {
+                if let Some(candidate) = candidate
+                    && closest.is_none_or(|(_, dist_old)| candidate.1 < dist_old)
+                {
+                    *closest = Some(candidate);
                 }
             }
+            fn get_closest(
+                iter: impl Iterator<Item = Position>,
+                reference: Position,
+            ) -> Option<(Position, u16)> {
+                iter.map(|pos_border| {
+                    (pos_border, DistanceBotWalk::measure(pos_border - reference))
+                })
+                .min_by_key(|&(_, dist)| dist)
+            }
+
+            let mut closest = None;
+            loop {
+                // split iterator into chunks to prevent to many await points
+                match unknown_reachables.next_chunk::<5>() {
+                    Ok(chunk) => {
+                        update_closest(&mut closest, get_closest(chunk.into_iter(), scan_pos));
+                    }
+                    Err(iter) => {
+                        update_closest(&mut closest, get_closest(iter, scan_pos));
+                        break;
+                    }
+                }
+                Breakpoint::new().await;
+            }
+
+            if let Some((destination_pos, _)) = closest {
+                destination = Some(destination_pos);
+                nav.initialize(scan_pos, destination_pos);
+            }
+        }
         Breakpoint::new().await;
 
         // react to movements that changed the starting position of navigation that changed the
         // starting position of navigation
         println!("nu");
         if let Some(task) = nav.get_state().task()
-            && task.from != scan_pos {
-                nav.update_start(scan_pos).unwrap();
-            }
+            && task.from != scan_pos
+        {
+            nav.update_start(scan_pos).unwrap();
+        }
         Breakpoint::new().await;
 
         // navigation
@@ -647,7 +654,7 @@ type MyExp = Exploration<256, MyMap>;
 
 #[task]
 async fn watchdog() -> ! {
-    let mut dog = StatsDog::new();
+    let mut dog = StatsDog::<KartoffelClock>::new();
     loop {
         dog.restart_timer();
         Breakpoint::new().await;

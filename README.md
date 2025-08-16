@@ -6,7 +6,7 @@ runtime like [embassy](https://github.com/embassy-rs/embassy), but also (mostly)
 
 ## Try it out
 
-In the `src/bin` directory there are a few example bots. These are:
+In the `cross/src/bin` directory there are a few example bots. These are:
 
 | *name* | *description* |
 |--------|---------------|
@@ -23,7 +23,11 @@ The runner-gps bot can be spectated at [the official webpage](https://kartoffels
 - 905f-47de-08a1-75fc
 - fc25-50df-6b90-2789
 
-To build the bots, use
+To build the bots, navigate to the `cross` directory,
+```bash
+cd cross
+```
+then
 ```bash
 cargo build --release --bins
 ```
@@ -40,15 +44,17 @@ The different crates provide different functionality:
 ### `async-kartoffel`
 - Contains safe and convenient abstractions `Motor`, `Arm`, `Radar`, ... For radar scan,
   an `Rc`-like implementation is used to prevent new scan from overwriting old ones.
-- Easily keep track of absolute `Position`, relative position (`Vec2`) in global (north, east,
-  south, west) and local (front, right, back, left) coordinate frames, `Rotation`s and `Direction`s.
 - Moving the bot, stabbing, scanning etc. mutate global state. This is
   represented by encapsulating these functions in singletons. They can be aquired
   exactly once using `Bot::take()`. This way you can be sure that if you keep a
   reference to `motor`, and checked `motor.is_ready()`, the motor stays ready.
-- `Instant` and `Duration` tyes for `Timer`s
 - `async` API that does not block the execution of other code, like `motor.step_fw().await`. There
   are also non-async variants such as `motor.wait_blocking()` or `motor.try_step_fw()`.
+
+### `async-kartoffel-generic`
+- Easily keep track of absolute `Position`, relative position (`Vec2`) in global (north, east,
+  south, west) and local (front, right, back, left) coordinate frames, `Rotation`s and `Direction`s.
+- `Instant` and `Duration` tyes for `Timer`s
 
 ### `async-algorithm`
 - Contains mapping, exploration, and navigation utilities and algorithms.
@@ -96,6 +102,7 @@ dot -Tsvg cg.dot > cg.svg
 
 The unstable `custom_test_frameworks` is used for test. The build command is e.g. (linux and wayland)
 ```bash
+cd cross
 cargo build --release --tests --all
 base64 target/riscv32-kartoffel-bot/release/deps/async_kartoffel-e58abfc84af62516 | wl-copy
 ```
@@ -108,9 +115,6 @@ Add the following lines
 #![test_runner(test_kartoffel::runner)]
 ```
 add the top of your library to enable tests. Might not work for binaries though.
-
-### Running native binaries
-```cargo run --release --package kartoffel-gps-builder --target x86_64-unknown-linux-gnu -Z build-std=core,std,alloc --bin analyze-map```
 
 ### Workspace layout
 as recommended here https://ferrous-systems.com/blog/test-embedded-app/

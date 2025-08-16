@@ -117,4 +117,25 @@ Add the following lines
 add the top of your library to enable tests. Might not work for binaries though.
 
 ### Workspace layout
-as recommended here https://ferrous-systems.com/blog/test-embedded-app/
+As recommended for embedded targets [by
+ferrocene](https://ferrous-systems.com/blog/test-embedded-app/), the project consists of two nested
+workspaces. The outer one (`Cargo.toml`) is architecture agnostic and can therefore be tested on the
+native system, while the inner one (`cross/Cargo.toml`) work only on the `riscv32-kartoffel-bot`
+target. rust-analyzer by default does only work in the outer workspace. To configure rust-analyzher
+to work in both, you can either e.g. add the following to your
+
+In VS Code, you can add the following to .vscode/settings.json
+```json
+{
+  "rust-analyzer.linkedProjects": [
+    // order is important (rust-analyzer/rust-analyzer#7764)
+    "Cargo.toml",
+    "cross/Cargo.toml",
+  ]
+}
+```
+For Neovim, you can run the provided lua script after the rust-analyzer LSP has been started:
+
+```
+:source nvim-rust-analyzer-nested.lua
+```

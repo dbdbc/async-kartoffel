@@ -17,7 +17,7 @@ use async_kartoffel::{
     println,
 };
 use async_kartoffel_generic::{
-    D3, Direction, Local, Position, RadarScanTrait, RadarSize, Rotation, Tile, Vec2,
+    D3, Direction, Local, Position, RadarScanTrait, RadarSize, Rotation, Tile, Transform, Vec2,
 };
 use core::num::NonZeroU16;
 use core::ops::Deref;
@@ -127,47 +127,6 @@ impl<const N: usize> Evaluation for NavigationEvaluationN<N> {
     }
 }
 
-/// translation is given in original coordinates, so not rotated yet
-#[derive(Default)]
-pub struct Transform {
-    translation: Vec2<Local>,
-    rotation: Rotation,
-}
-
-impl Transform {
-    pub fn transform(&self, vec: Vec2<Local>) -> Vec2<Local> {
-        (vec + self.translation).rotate(self.rotation)
-    }
-    pub fn transform_rot(&self, rot: Rotation) -> Rotation {
-        rot + self.rotation
-    }
-
-    pub fn inverse_transform(&self, vec: Vec2<Local>) -> Vec2<Local> {
-        vec.rotate(-self.rotation) - self.translation
-    }
-    pub fn inverse_transform_rot(&self, rot: Rotation) -> Rotation {
-        rot - self.rotation
-    }
-
-    fn from_motor_action(motor: Option<MotorAction>) -> Self {
-        match motor {
-            Some(MotorAction::Step) => Self {
-                translation: Vec2::new_front(1),
-                rotation: Default::default(),
-            },
-            Some(MotorAction::TurnLeft) => Self {
-                translation: Default::default(),
-                rotation: Rotation::Left,
-            },
-            Some(MotorAction::TurnRight) => Self {
-                translation: Default::default(),
-                rotation: Rotation::Right,
-            },
-            None => Default::default(),
-        }
-    }
-}
-
 #[derive(Clone, Copy)]
 enum ArmAction {
     Stab,
@@ -175,12 +134,14 @@ enum ArmAction {
 #[derive(Clone, Copy, PartialEq, Debug)]
 enum MotorAction {
     Step,
+    StepBack,
     TurnRight,
     TurnLeft,
 }
 impl MotorAction {
-    const ALL_AND_NOTHING: [Option<MotorAction>; 4] = [
+    const ALL_AND_NOTHING: [Option<MotorAction>; 5] = [
         Some(Self::Step),
+        Some(Self::StepBack),
         Some(Self::TurnRight),
         Some(Self::TurnLeft),
         None,
@@ -188,8 +149,18 @@ impl MotorAction {
     async fn execute(&self, motor: &mut Motor) {
         match self {
             MotorAction::Step => motor.step_fw().await,
+            MotorAction::StepBack => motor.step_bw().await,
             MotorAction::TurnRight => motor.turn_right().await,
             MotorAction::TurnLeft => motor.turn_left().await,
+        }
+    }
+    fn to_transform(motor: Option<MotorAction>) -> Transform {
+        match motor {
+            Some(MotorAction::Step) => Transform::from(Vec2::new_front(1)),
+            Some(MotorAction::TurnLeft) => Transform::from(Rotation::Left),
+            Some(MotorAction::TurnRight) => Transform::from(Rotation::Right),
+            Some(MotorAction::StepBack) => Transform::from(Vec2::new_back(1)),
+            None => Transform::identity(),
         }
     }
 }
@@ -281,6 +252,7 @@ async fn execute_with_arm_timeout(
                 MotorAction::TurnLeft => *direction += Rotation::Left,
                 MotorAction::TurnRight => *direction += Rotation::Right,
                 MotorAction::Step => *position += Vec2::new_front(1).global(*direction),
+                MotorAction::StepBack => *position += Vec2::new_back(1).global(*direction),
             }
         }
     }
@@ -324,7 +296,7 @@ fn bot_eval_func(dir: Vec2<Local>, stab: bool) -> (u8, bool) {
 }
 
 fn wall_eval_func<D: RadarSize>(radar_scan: &RadarScan<D>, transform: &Transform) -> u8 {
-    let front = transform.transform(Vec2::new_front(1));
+    let front = transform.chain(Vec2::new_front(1).into()).translation();
     match radar_scan.at(front) {
         Some(tile) if tile.is_walkable_terrain() => 0,
         Some(_) => 2,
@@ -345,9 +317,9 @@ fn movement(
     let (motor, stab) = MotorAction::ALL_AND_NOTHING
         .into_iter()
         .filter_map(|movement| {
-            let t = Transform::from_motor_action(movement);
-            let next_location = t.transform(Default::default());
-            let next_rotation = t.transform_rot(Rotation::Id);
+            let t = MotorAction::to_transform(movement);
+            let next_location = t.translation();
+            let next_rotation = t.rotation();
             let possible = radar_scan
                 .at(next_location)
                 .is_some_and(|tile| tile.is_walkable_terrain());
@@ -355,7 +327,9 @@ fn movement(
                 // add evaluation for all bots
                 let (bot_eval, stab) = bots
                     .iter()
-                    .map(|vec| bot_eval_func(t.inverse_transform(*vec), can_stab))
+                    .map(|vec| {
+                        bot_eval_func(t.inverse().chain((*vec).into()).translation(), can_stab)
+                    })
                     .fold(
                         (0, false),
                         |(value_acc, stab_acc): (u8, _), (value, stab)| {

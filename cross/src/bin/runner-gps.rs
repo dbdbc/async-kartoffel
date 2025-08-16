@@ -9,8 +9,7 @@ use async_kartoffel::{
     Arm, Bot, Instant, KartoffelClock, Motor, Radar, RadarScan, Timer, exit, println,
 };
 use async_kartoffel_generic::{
-    D7, Direction, Duration, Local, Position, PositionAnchor, RadarScanTrait, RadarSize, Rotation,
-    Tile, Vec2,
+    D7, Direction, Duration, Local, RadarScanTrait, RadarSize, Rotation, Tile, Transform, Vec2,
 };
 use embassy_executor::{Executor, task};
 use embassy_futures::select::{Either, Either3, select, select3};
@@ -103,93 +102,6 @@ impl NavigationSection {
     }
 }
 
-/// translation is given in original coordinates, so not rotated yet
-#[derive(Default, Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
-pub struct Transform {
-    pub vec: Vec2<Local>,
-    pub rotation: Rotation,
-}
-
-impl From<Vec2<Local>> for Transform {
-    fn from(value: Vec2<Local>) -> Self {
-        Self {
-            vec: value,
-            rotation: Rotation::Id,
-        }
-    }
-}
-
-impl From<Rotation> for Transform {
-    fn from(value: Rotation) -> Self {
-        Self {
-            vec: Vec2::default(),
-            rotation: value,
-        }
-    }
-}
-
-impl Transform {
-    pub fn identity() -> Self {
-        Default::default()
-    }
-    pub fn new(translation: Vec2<Local>, rotation: Rotation) -> Self {
-        Self {
-            vec: translation,
-            rotation,
-        }
-    }
-
-    pub fn chain(&self, next: Self) -> Self {
-        Self {
-            vec: self.vec + next.vec.rotate(self.rotation),
-            rotation: self.rotation + next.rotation,
-        }
-    }
-
-    /// self.chain(self.inverse()) == Self::identity()
-    /// self.inverse(self.inverse()) == self
-    pub fn inverse(&self) -> Self {
-        Self {
-            vec: (-self.vec).rotate(-self.rotation),
-            rotation: -self.rotation,
-        }
-    }
-
-    fn from_motor_action(motor: Option<MotorAction>) -> Self {
-        match motor {
-            Some(MotorAction::Step) => Self {
-                vec: Vec2::new_front(1),
-                rotation: Default::default(),
-            },
-            Some(MotorAction::TurnLeft) => Self {
-                vec: Default::default(),
-                rotation: Rotation::Left,
-            },
-            Some(MotorAction::TurnRight) => Self {
-                vec: Default::default(),
-                rotation: Rotation::Right,
-            },
-            Some(MotorAction::StepBack) => Self {
-                vec: Vec2::new_back(1),
-                rotation: Rotation::default(),
-            },
-            None => Default::default(),
-        }
-    }
-
-    fn apply<A: PositionAnchor>(
-        &self,
-        pos: Position<A>,
-        facing: Direction,
-    ) -> (Position<A>, Direction) {
-        (pos + self.vec.global(facing), facing + self.rotation)
-    }
-
-    fn apply_dir(&self, facing: Direction) -> Direction {
-        facing + self.rotation
-    }
-}
-
 #[derive(Clone, Copy, Debug)]
 enum ArmAction {
     Stab,
@@ -215,6 +127,15 @@ impl MotorAction {
             MotorAction::StepBack => motor.step_bw().await,
             MotorAction::TurnRight => motor.turn_right().await,
             MotorAction::TurnLeft => motor.turn_left().await,
+        }
+    }
+    fn to_transform(motor: Option<MotorAction>) -> Transform {
+        match motor {
+            Some(MotorAction::Step) => Transform::from(Vec2::new_front(1)),
+            Some(MotorAction::TurnLeft) => Transform::from(Rotation::Left),
+            Some(MotorAction::TurnRight) => Transform::from(Rotation::Right),
+            Some(MotorAction::StepBack) => Transform::from(Vec2::new_back(1)),
+            None => Transform::identity(),
         }
     }
 }
@@ -306,7 +227,7 @@ async fn execute_with_arm_timeout(
         return (Transform::identity(), ExecutionResult::RadarReady);
     }
     (
-        Transform::from_motor_action(action.motor),
+        MotorAction::to_transform(action.motor),
         if action.arm.is_some() {
             match select3(radar.wait(), arm.stab(), Timer::at(action.arm_timeout)).await {
                 Either3::First(()) => ExecutionResult::RadarReady,
@@ -434,15 +355,17 @@ fn movement(
     let (motor, stab) = MotorAction::ALL_AND_NOTHING
         .into_iter()
         .filter_map(|movement| {
-            let transform_movement = Transform::from_motor_action(movement);
+            let transform_movement = MotorAction::to_transform(movement);
             let transform_next_from_scan = transform_from_scan.chain(transform_movement);
-            let next_location = transform_next_from_scan.vec;
+            let next_location = transform_next_from_scan.translation();
 
             let possible = radar_scan
                 .at(next_location)
                 .is_some_and(|tile| tile.is_walkable_terrain());
             let back_against_wall = radar_scan
-                .at(transform_next_from_scan.chain(Vec2::new_back(1).into()).vec)
+                .at(transform_next_from_scan
+                    .chain(Vec2::new_back(1).into())
+                    .translation())
                 .is_some_and(|tile| !tile.is_walkable_terrain());
             if possible {
                 // add evaluation for all bots
@@ -450,7 +373,10 @@ fn movement(
                     .iter()
                     .map(|&bot| {
                         bot_eval_func(
-                            transform_next_from_scan.inverse().chain(bot.into()).vec,
+                            transform_next_from_scan
+                                .inverse()
+                                .chain(bot.into())
+                                .translation(),
                             can_stab,
                             back_against_wall,
                         )
@@ -467,7 +393,7 @@ fn movement(
 
                 let wall_eval = -terrain_eval_func(|vec| {
                     radar_scan
-                        .at(transform_next_from_scan.chain(vec.into()).vec)
+                        .at(transform_next_from_scan.chain(vec.into()).translation())
                         .map(|tile| tile.is_walkable_terrain())
                 });
 
@@ -475,7 +401,7 @@ fn movement(
                     NavigationEvaluation::NoInformation
                 } else {
                     let movement_dirs = transform_movement
-                        .vec
+                        .translation()
                         .global(nav_state.facing())
                         .directions();
                     if let &[movement_dir] = movement_dirs {
@@ -593,7 +519,8 @@ fn get_bot_list<const MAX_N_BOTS: usize, D: RadarSize>(
     has_stabbed: bool,
     radar_scan: &RadarScan<D>,
 ) -> Vec<Vec2<Local>, MAX_N_BOTS> {
-    let stabbed_location = has_stabbed.then_some(transform.chain(Vec2::new_front(1).into()).vec);
+    let stabbed_location =
+        has_stabbed.then_some(transform.chain(Vec2::new_front(1).into()).translation());
     if let Some(stabbed_location) = stabbed_location {
         radar_scan
             .iter_tile(Tile::Bot)

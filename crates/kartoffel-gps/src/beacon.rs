@@ -1522,7 +1522,7 @@ mod tests {
             is_navigation_trivial::<64>(&map, map.corner_north_east(), map.corner_south_west()),
             Ok(true)
         );
-        assert_eq!(map.dirty_outside.load(Ordering::Relaxed), false);
+        assert!(!map.dirty_outside.load(Ordering::Relaxed));
     }
 
     #[test]
@@ -1551,7 +1551,7 @@ mod tests {
             is_navigation_trivial::<64>(&map, map.corner_north_east(), map.corner_south_west()),
             Ok(false)
         );
-        assert_eq!(map.dirty_outside.load(Ordering::Relaxed), false);
+        assert!(!map.dirty_outside.load(Ordering::Relaxed));
     }
 
     #[test]
@@ -1563,8 +1563,8 @@ mod tests {
             [true, true, true],
             [true, false, true],
         ]);
-        assert_eq!(map.get(pos_east_south(2, 3)), true);
-        assert_eq!(map.get(pos_east_south(1, 3)), false);
+        assert!(map.get(pos_east_south(2, 3)));
+        assert!(!map.get(pos_east_south(1, 3)));
         assert_eq!(
             is_navigation_trivial::<64>(&map, map.corner_north_west(), map.corner_south_east()),
             Ok(false)
@@ -1581,13 +1581,13 @@ mod tests {
             is_navigation_trivial::<64>(&map, map.corner_north_east(), map.corner_south_west()),
             Ok(false)
         );
-        assert_eq!(map.dirty_outside.load(Ordering::Relaxed), false);
+        assert!(!map.dirty_outside.load(Ordering::Relaxed));
 
         assert_eq!(
             is_navigation_trivial::<64>(&map, map.corner_north_east(), pos_east_south(3, 3)),
             Ok(false)
         );
-        assert_eq!(map.dirty_outside.load(Ordering::Relaxed), true);
+        assert!(map.dirty_outside.load(Ordering::Relaxed));
     }
 
     /// Trivial navigable means: No matter where you go, if the general direction is correct, you will
@@ -1674,15 +1674,14 @@ mod tests {
                 }
             }
         }
-        return false;
+        false
     }
 
     #[test]
     fn trivial_nav_positive() {
         let mut rng = {
             let seed = [0u8; 32];
-            let rng = SmallRng::from_seed(seed);
-            rng
+            SmallRng::from_seed(seed)
         };
 
         // (max_dist + 2).div_ceil(2).next_power_of_two(),
@@ -1693,9 +1692,9 @@ mod tests {
             let mut map = [[false; WIDTH]; HEIGHT];
             let dist = Uniform::try_from(0..odds.0 + odds.1).unwrap();
 
-            for i_h in 0..HEIGHT {
-                for i_w in 0..WIDTH {
-                    map[i_h][i_w] = dist.sample(rng) < odds.0;
+            for row in map.iter_mut() {
+                for tile in row.iter_mut() {
+                    *tile = dist.sample(rng) < odds.0;
                 }
             }
 
@@ -1744,19 +1743,16 @@ mod tests {
                         });
                         let dir = dirs.choose(rng);
                         if let Some(dir) = dir {
-                            pos = pos + Vec2::new_in_direction(dir, 1);
+                            pos += Vec2::new_in_direction(dir, 1);
                         } else {
-                            assert!(false);
+                            panic!();
                         }
                     }
                     assert_eq!(pos, dest);
-                    assert_eq!(
-                        is_trivial_navigable_test(&map, start, dest) || !map.get(start),
-                        true
-                    );
+                    assert!(is_trivial_navigable_test(&map, start, dest) || !map.get(start),);
                 } else {
                     println!("n {:?} {:?}", dir0, dir1);
-                    assert_eq!(is_trivial_navigable_test(&map, start, dest), false);
+                    assert!(!is_trivial_navigable_test(&map, start, dest));
                 }
             }
 

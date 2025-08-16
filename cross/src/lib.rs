@@ -1,25 +1,25 @@
 #![no_std]
 
+include!(concat!(env!("OUT_DIR"), "/codegen.rs"));
+
 extern crate alloc;
 
 use kartoffel_gps::{
-    GlobalPos,
     beacon::{BeaconInfo, NavigatorResources, NavigatorResourcesImpl},
     const_graph::Graph,
     gps::{MapSection, MapSectionTrait},
     map::TrueMap,
     pos::pos_east_south,
+    GlobalPos,
 };
-
-include!(concat!(env!("OUT_DIR"), "/codegen.rs"));
 
 pub fn get_global_pos(chunk: &MapSection<CHUNK_SIZE>) -> Option<GlobalPos> {
     let (east, south) = UNIQUE_CHUNKS.get(chunk.compress()?.as_ref()).cloned()?;
     Some(pos_east_south(east.into(), south.into()))
 }
 
-pub fn global_pos_entries()
--> impl Iterator<Item = &'static <MapSection<CHUNK_SIZE> as MapSectionTrait>::Compressed> {
+pub fn global_pos_entries(
+) -> impl Iterator<Item = &'static <MapSection<CHUNK_SIZE> as MapSectionTrait>::Compressed> {
     UNIQUE_CHUNKS.keys()
 }
 

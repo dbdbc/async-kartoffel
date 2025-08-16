@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
-test-kartoffel = {path = "../../crates/test-kartoffel", optional = true}
+test-kartoffel = {workspace = true, optional = true}
 async-kartoffel-generic.workspace = true
 kartoffel.workspace = true
 critical-section.workspace = true

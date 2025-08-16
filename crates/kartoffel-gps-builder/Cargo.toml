@@ -4,11 +4,9 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
-kartoffel-gps = {path = "../../crates/kartoffel-gps"}
-async-kartoffel-generic = {path = "../../crates/async-kartoffel-generic"}
+kartoffel-gps.workspace = true
+async-kartoffel-generic.workspace = true
 anyhow = {workspace = true, default-features = true}
 ndarray = {workspace = true, default-features = true}
 ndarray-stats = {workspace = true, default-features = true}
-phf = {workspace = true, default-features = true}
-phf_codegen = {workspace = true, default-features = true}
 phf_shared = {workspace = true, default-features = true}

@@ -107,7 +107,7 @@ const NAV_ACTIVE_BUFFER: usize = {};
     for row in 0..map.height {
         let mut row_chars = Vec::new();
         for col in 0..map.width {
-            let pos = pos_east_south(col as i16, -(row as i16));
+            let pos = pos_east_south(col as i16, row as i16);
             row_chars.push(if map.get(pos) { '.' } else { '#' });
         }
         map_chars.push(row_chars);

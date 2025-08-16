@@ -4,8 +4,8 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
-async-kartoffel-generic = {path = "../../crates/async-kartoffel-generic"}
-async-algorithm = {path = "../../crates/async-algorithm"}
+async-kartoffel-generic.workspace = true
+async-algorithm.workspace = true
 phf_shared.workspace = true
 heapless.workspace = true
 rand.workspace = true

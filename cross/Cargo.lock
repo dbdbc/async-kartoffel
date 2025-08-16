@@ -316,8 +316,6 @@ dependencies = [
  "kartoffel-gps",
  "ndarray",
  "ndarray-stats",
- "phf",
- "phf_codegen",
  "phf_shared",
 ]
 
